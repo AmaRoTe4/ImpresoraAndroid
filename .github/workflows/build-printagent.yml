@@ -1,0 +1,81 @@
+name: Build PrintAgent Android APK
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - "**.cs"
+      - "**.csproj"
+      - "AndroidManifest.xml"
+      - "global.json"
+      - ".github/workflows/build-printagent.yml"
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+    inputs:
+      release:
+        description: "Build signed release APK"
+        type: boolean
+        default: false
+      version:
+        description: "Version label for the release artifact (e.g. v0.2.0)"
+        required: false
+        default: ""
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Install Android workload
+        run: dotnet workload install android
+
+      - name: Restore
+        run: dotnet restore PrintAgent.Android.csproj
+
+      - name: Build & publish (Debug)
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.release == false }}
+        run: dotnet publish PrintAgent.Android.csproj -f net9.0-android -c Debug -p:AndroidPackageFormat=apk
+
+      - name: Upload debug APK
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.release == false }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: printagent-debug
+          path: bin/Debug/net9.0-android/publish/*.apk
+          retention-days: 7
+
+      - name: Decode keystore
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.release == true }}
+        run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > release.keystore
+
+      - name: Build & publish (Release, signed)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.release == true }}
+        run: |
+          dotnet publish PrintAgent.Android.csproj -f net9.0-android -c Release \
+            -p:AndroidPackageFormat=apk \
+            -p:AndroidKeyStore=true \
+            -p:AndroidSigningKeyStore=release.keystore \
+            -p:AndroidSigningKeyAlias=${{ secrets.ANDROID_KEY_ALIAS }} \
+            -p:AndroidSigningKeyPass=${{ secrets.ANDROID_KEY_PASSWORD }} \
+            -p:AndroidSigningStorePass=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+
+      - name: Remove keystore
+        if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.release == true }}
+        run: rm -f release.keystore
+
+      - name: Upload release APK
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.release == true }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: printagent-release-${{ inputs.version || github.run_number }}
+          path: bin/Release/net9.0-android/publish/*-Signed.apk
+          retention-days: 30

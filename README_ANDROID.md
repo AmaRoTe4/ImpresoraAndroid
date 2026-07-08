@@ -29,13 +29,13 @@ Desde la raíz del repo:
 
 ```bash
 dotnet workload install android
-dotnet publish PrintAgent.Android/PrintAgent.Android.csproj -f net8.0-android -c Release
+dotnet publish PrintAgent.Android/PrintAgent.Android.csproj -f net9.0-android -c Release
 ```
 
 El APK queda dentro de:
 
 ```txt
-PrintAgent.Android/bin/Release/net8.0-android/publish/
+PrintAgent.Android/bin/Release/net9.0-android/publish/
 ```
 
 ## Prueba en la tablet
@@ -90,7 +90,7 @@ Una vez configurado, desde GitHub:
 
 ```bash
 dotnet workload install android
-dotnet publish -c Debug -f net8.0-android -p:AndroidPackageFormat=apk -o apk-output
+dotnet publish -c Debug -f net9.0-android -p:AndroidPackageFormat=apk -o apk-output
 ```
 
 ## Nota importante
