@@ -143,7 +143,11 @@ public sealed class UsbEscPosPrinter : IDisposable
             }
         });
 
-        _activity.RegisterReceiver(_receiver, new IntentFilter(_permissionAction));
+        var filter = new IntentFilter(_permissionAction);
+        if (Build.VERSION.SdkInt >= BuildVersionCodes.Tiramisu)
+            _activity.RegisterReceiver(_receiver, filter, ReceiverFlags.NotExported);
+        else
+            _activity.RegisterReceiver(_receiver, filter);
     }
 
     public void Dispose()
