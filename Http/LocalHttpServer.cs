@@ -104,7 +104,7 @@ public sealed class LocalHttpServer
 
     private async Task HandleClient(TcpClient client)
     {
-        await using var _ = client;
+        using var _ = client;
         try
         {
             using var stream = client.GetStream();

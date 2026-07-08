@@ -29,9 +29,9 @@ public sealed class MainActivity : Activity
 
         var layout = new LinearLayout(this)
         {
-            Orientation = Orientation.Vertical,
-            Padding = 24
+            Orientation = Orientation.Vertical
         };
+        layout.SetPadding(24, 24, 24, 24);
         layout.AddView(_status);
         layout.AddView(btnStatus);
         layout.AddView(btnPermission);

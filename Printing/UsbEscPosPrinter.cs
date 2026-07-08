@@ -1,6 +1,7 @@
 using Android.App;
 using Android.Content;
 using Android.Hardware.Usb;
+using Android.OS;
 
 namespace PrintAgentAndroid.Printing;
 
@@ -24,7 +25,7 @@ public sealed class UsbEscPosPrinter : IDisposable
 
     public IReadOnlyList<object> ListDevices()
     {
-        return _usbManager.DeviceList.Values
+        return (_usbManager.DeviceList?.Values ?? Enumerable.Empty<UsbDevice>())
             .Select(d => new
             {
                 name = d.DeviceName,
@@ -39,7 +40,7 @@ public sealed class UsbEscPosPrinter : IDisposable
 
     public UsbDevice? FindPrinterDevice()
     {
-        foreach (var device in _usbManager.DeviceList.Values)
+        foreach (var device in _usbManager.DeviceList?.Values ?? Enumerable.Empty<UsbDevice>())
         {
             if (TryFindBulkOutEndpoint(device, out _, out _))
                 return device;
