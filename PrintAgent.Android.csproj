@@ -11,6 +11,9 @@
     <SupportedOSPlatformVersion>23.0</SupportedOSPlatformVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <!-- Sin esto, un Debug APK instalado por adb (sin debugger de IDE) arranca sin
+         ensamblados .NET y aborta: "No assemblies found ... Fast Deployment". -->
+    <EmbedAssembliesIntoApk>true</EmbedAssembliesIntoApk>
   </PropertyGroup>
 
 </Project>
