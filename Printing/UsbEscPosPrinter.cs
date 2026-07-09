@@ -57,10 +57,10 @@ public sealed class UsbEscPosPrinter : IDisposable
 
         _permissionTcs = new TaskCompletionSource<bool>();
 
-        var intent = new Intent(_permissionAction);
+        var intent = new Intent(_permissionAction).SetPackage(_activity.PackageName);
         var flags = PendingIntentFlags.UpdateCurrent;
-        if (Build.VERSION.SdkInt >= BuildVersionCodes.S)
-            flags |= PendingIntentFlags.Mutable;
+        if (Build.VERSION.SdkInt >= BuildVersionCodes.M)
+            flags |= PendingIntentFlags.Immutable;
 
         var pendingIntent = PendingIntent.GetBroadcast(_activity, 0, intent, flags);
         _usbManager.RequestPermission(device, pendingIntent);
