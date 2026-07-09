@@ -23,7 +23,7 @@ public sealed class LocalHttpServer
         _printer = printer;
         _log = log;
         _port = port;
-        _bindAddress = IPAddress.Loopback;
+        _bindAddress = IPAddress.Any;
     }
 
     public Task StartAsync()
@@ -241,7 +241,7 @@ public sealed class LocalHttpServer
                 }
 
                 var zplData = valoresEl.GetString() ?? "";
-                await _printer.PrintAsync(EscPosTicketBuilder.BuildRawText(zplData));
+                await _printer.PrintAsync(Encoding.UTF8.GetBytes(zplData));
                 await WriteJson(stream, 200, new { status = "printed" });
                 return;
             }

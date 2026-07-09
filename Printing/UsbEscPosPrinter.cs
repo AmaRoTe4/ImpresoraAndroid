@@ -7,19 +7,19 @@ namespace PrintAgentAndroid.Printing;
 
 public sealed class UsbEscPosPrinter : IDisposable
 {
-    private readonly Activity _activity;
+    private readonly Context _context;
     private readonly UsbManager _usbManager;
     private readonly Action<string> _log;
     private readonly string _permissionAction;
     private PermissionReceiver? _receiver;
     private TaskCompletionSource<bool>? _permissionTcs;
 
-    public UsbEscPosPrinter(Activity activity, Action<string> log)
+    public UsbEscPosPrinter(Context context, Action<string> log)
     {
-        _activity = activity;
+        _context = context;
         _log = log;
-        _usbManager = (UsbManager)activity.GetSystemService(Context.UsbService)!;
-        _permissionAction = activity.PackageName + ".USB_PERMISSION";
+        _usbManager = (UsbManager)context.GetSystemService(Context.UsbService)!;
+        _permissionAction = context.PackageName + ".USB_PERMISSION";
         RegisterReceiver();
     }
 
@@ -57,12 +57,12 @@ public sealed class UsbEscPosPrinter : IDisposable
 
         _permissionTcs = new TaskCompletionSource<bool>();
 
-        var intent = new Intent(_permissionAction).SetPackage(_activity.PackageName);
+        var intent = new Intent(_permissionAction).SetPackage(_context.PackageName);
         var flags = PendingIntentFlags.UpdateCurrent;
         if (Build.VERSION.SdkInt >= BuildVersionCodes.M)
             flags |= PendingIntentFlags.Immutable;
 
-        var pendingIntent = PendingIntent.GetBroadcast(_activity, 0, intent, flags);
+        var pendingIntent = PendingIntent.GetBroadcast(_context, 0, intent, flags);
         _usbManager.RequestPermission(device, pendingIntent);
 
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
@@ -145,16 +145,16 @@ public sealed class UsbEscPosPrinter : IDisposable
 
         var filter = new IntentFilter(_permissionAction);
         if (Build.VERSION.SdkInt >= BuildVersionCodes.Tiramisu)
-            _activity.RegisterReceiver(_receiver, filter, ReceiverFlags.NotExported);
+            _context.RegisterReceiver(_receiver, filter, ReceiverFlags.NotExported);
         else
-            _activity.RegisterReceiver(_receiver, filter);
+            _context.RegisterReceiver(_receiver, filter);
     }
 
     public void Dispose()
     {
         if (_receiver != null)
         {
-            try { _activity.UnregisterReceiver(_receiver); } catch { }
+            try { _context.UnregisterReceiver(_receiver); } catch { }
             _receiver = null;
         }
     }

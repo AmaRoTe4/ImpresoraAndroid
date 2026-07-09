@@ -1,17 +1,19 @@
 using Android.App;
+using Android.Content;
 using Android.OS;
 using Android.Widget;
-using PrintAgentAndroid.Http;
 using PrintAgentAndroid.Printing;
+using PrintAgentAndroid.Services;
 
 namespace PrintAgentAndroid;
 
 [Activity(Label = "PrintAgent Android", MainLauncher = true, Exported = true)]
 public sealed class MainActivity : Activity
 {
+    private const string ZplTestPayload = "^XA^FO50,50^ADN,36,20^FDPRINTAGENT TEST^FS^FO50,100^BY2^BCN,80,Y,N,N^FD123456^FS^XZ";
+
     private TextView? _status;
-    private UsbEscPosPrinter? _printer;
-    private LocalHttpServer? _server;
+    private readonly ServiceConnection _connection = new();
 
     protected override void OnCreate(Bundle? savedInstanceState)
     {
@@ -25,7 +27,8 @@ public sealed class MainActivity : Activity
 
         var btnStatus = new Button(this) { Text = "Ver estado" };
         var btnPermission = new Button(this) { Text = "Pedir permiso USB" };
-        var btnTest = new Button(this) { Text = "Imprimir prueba" };
+        var btnTestEscPos = new Button(this) { Text = "Imprimir prueba (ESC/POS ticket)" };
+        var btnTestZpl = new Button(this) { Text = "Imprimir prueba (ZPL etiqueta)" };
 
         var layout = new LinearLayout(this)
         {
@@ -35,19 +38,24 @@ public sealed class MainActivity : Activity
         layout.AddView(_status);
         layout.AddView(btnStatus);
         layout.AddView(btnPermission);
-        layout.AddView(btnTest);
+        layout.AddView(btnTestEscPos);
+        layout.AddView(btnTestZpl);
         SetContentView(layout);
 
-        _printer = new UsbEscPosPrinter(this, Log);
-        _server = new LocalHttpServer(_printer, Log, port: 5000);
-        _ = _server.StartAsync();
+        if (Build.VERSION.SdkInt >= BuildVersionCodes.Tiramisu)
+            RequestPermissions(new[] { global::Android.Manifest.Permission.PostNotifications }, 100);
+
+        _connection.LogReceived += Log;
+        StartAndBindService();
 
         btnStatus.Click += (_, _) => RefreshStatus();
         btnPermission.Click += async (_, _) =>
         {
+            var printer = _connection.Service?.Printer;
+            if (printer == null) { Log("Servicio aún no conectado."); return; }
             try
             {
-                await _printer.EnsurePermissionAsync();
+                await printer.EnsurePermissionAsync();
                 Log("Permiso USB OK.");
             }
             catch (Exception ex)
@@ -55,42 +63,70 @@ public sealed class MainActivity : Activity
                 Log("Error permiso USB: " + ex.Message);
             }
         };
-        btnTest.Click += async (_, _) =>
+        btnTestEscPos.Click += async (_, _) =>
         {
+            var printer = _connection.Service?.Printer;
+            if (printer == null) { Log("Servicio aún no conectado."); return; }
             try
             {
-                var bytes = EscPosTicketBuilder.BuildRawText("TEST PRINTAGENT ANDROID\nPuerto: http://127.0.0.1:5000\n");
-                await _printer.PrintAsync(bytes);
-                Log("Prueba impresa.");
+                var bytes = EscPosTicketBuilder.BuildRawText("TEST PRINTAGENT ANDROID (ESC/POS)\nServidor: puerto 5000\n");
+                await printer.PrintAsync(bytes);
+                Log("Prueba ESC/POS impresa.");
             }
             catch (Exception ex)
             {
-                Log("Error imprimiendo: " + ex.Message);
+                Log("Error imprimiendo ESC/POS: " + ex.Message);
+            }
+        };
+        btnTestZpl.Click += async (_, _) =>
+        {
+            var printer = _connection.Service?.Printer;
+            if (printer == null) { Log("Servicio aún no conectado."); return; }
+            try
+            {
+                var bytes = System.Text.Encoding.UTF8.GetBytes(ZplTestPayload);
+                await printer.PrintAsync(bytes);
+                Log("Prueba ZPL impresa.");
+            }
+            catch (Exception ex)
+            {
+                Log("Error imprimiendo ZPL: " + ex.Message);
             }
         };
 
         RefreshStatus();
     }
 
+    private void StartAndBindService()
+    {
+        var intent = new Intent(this, typeof(PrintAgentService));
+        if (Build.VERSION.SdkInt >= BuildVersionCodes.O)
+            StartForegroundService(intent);
+        else
+            StartService(intent);
+
+        BindService(intent, _connection, Bind.AutoCreate);
+    }
+
     protected override void OnDestroy()
     {
-        _server?.Stop();
-        _printer?.Dispose();
+        try { UnbindService(_connection); } catch { }
         base.OnDestroy();
     }
 
     private void RefreshStatus()
     {
-        if (_printer == null)
+        var printer = _connection.Service?.Printer;
+        if (printer == null)
         {
-            Log("Printer no inicializada.");
+            Log("Servicio aún no conectado.");
             return;
         }
 
-        var device = _printer.FindPrinterDevice();
+        var device = printer.FindPrinterDevice();
         Log(device == null
-            ? "Servidor activo en http://127.0.0.1:5000 - Impresora USB no detectada."
-            : $"Servidor activo en http://127.0.0.1:5000 - USB detectado: {device.DeviceName} VID:{device.VendorId} PID:{device.ProductId} Permiso:{_printer.HasPermission(device)}");
+            ? "Servidor activo en puerto 5000 - Impresora USB no detectada."
+            : $"Servidor activo en puerto 5000 - USB detectado: {device.DeviceName} VID:{device.VendorId} PID:{device.ProductId} Permiso:{printer.HasPermission(device)}");
     }
 
     private void Log(string message)
@@ -100,5 +136,20 @@ public sealed class MainActivity : Activity
             if (_status != null)
                 _status.Text = $"{DateTime.Now:HH:mm:ss} - {message}\n\n" + _status.Text;
         });
+    }
+
+    private sealed class ServiceConnection : Java.Lang.Object, IServiceConnection
+    {
+        public PrintAgentService? Service { get; private set; }
+        public event Action<string>? LogReceived;
+
+        public void OnServiceConnected(ComponentName? name, IBinder? service)
+        {
+            Service = ((PrintAgentService.LocalBinder)service!).Service;
+            Service.LogEmitted += msg => LogReceived?.Invoke(msg);
+            LogReceived?.Invoke("Servicio conectado.");
+        }
+
+        public void OnServiceDisconnected(ComponentName? name) => Service = null;
     }
 }
