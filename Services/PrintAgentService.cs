@@ -7,7 +7,7 @@ using PrintAgentAndroid.Printing;
 
 namespace PrintAgentAndroid.Services;
 
-[Service(Exported = false, Label = "PrintAgent Android - Servicio")]
+[Service(Exported = false, Label = "PrintAgent Android - Servicio", ForegroundServiceType = ForegroundService.TypeConnectedDevice)]
 public sealed class PrintAgentService : Service
 {
     private const string ChannelId = "printagent_channel";
