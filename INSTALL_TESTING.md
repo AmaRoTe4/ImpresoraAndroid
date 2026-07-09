@@ -130,6 +130,12 @@ log es ruido del sistema.
 
 ## Limitaciones conocidas (prototipo)
 
-- Sin foreground service: si Android mata la app en background, el servidor HTTP muere con ella.
+- El foreground service usa tipo `dataSync` — en Android 15+ el sistema lo corta a las
+  6hs corridas por día, sin importar si sigue usándose. Para uso 24/7 real hay que
+  resolver esto (reinicio periódico del servicio, o migrar a otro modelo tipo companion
+  device). Se eligió `dataSync` a propósito para evitar el tipo `connectedDevice`, que
+  exige tener ya un permiso "compañero" (Bluetooth/NFC/WiFi/USB) concedido en el momento
+  exacto de arrancar el servicio — con USB eso choca con el flujo real (el permiso USB se
+  pide recién cuando el usuario toca el botón, después de que el servicio ya arrancó).
 - El permiso USB se pide por dispositivo — si se desconecta el cable, hay que volver a tocar "Pedir permiso USB".
-- Sin selección fija por VendorId/ProductId, sin cola de reintentos, sin ajuste de ancho de papel configurable.
+- Sin cola de reintentos, sin ajuste de ancho de papel configurable.
