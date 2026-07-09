@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Threading;
 using System.Text.Json;
 using PrintAgentAndroid.Printing;
 
@@ -14,9 +15,13 @@ public sealed class LocalHttpServer
     private CancellationTokenSource? _cts;
     private int _port;
     private IPAddress _bindAddress;
+    private int _jobsCompleted;
+    private int _jobsFailed;
 
     public int Port => _port;
     public string BindAddress => _bindAddress.ToString();
+    public int JobsCompleted => _jobsCompleted;
+    public int JobsFailed => _jobsFailed;
 
     public LocalHttpServer(UsbEscPosPrinter printer, Action<string> log, int port = 5000)
     {
@@ -129,6 +134,20 @@ public sealed class LocalHttpServer
         }
     }
 
+    private async Task PrintAndTrackAsync(byte[] bytes, int? vendorId = null, int? productId = null)
+    {
+        try
+        {
+            await _printer.PrintAsync(bytes, vendorId, productId);
+            Interlocked.Increment(ref _jobsCompleted);
+        }
+        catch
+        {
+            Interlocked.Increment(ref _jobsFailed);
+            throw;
+        }
+    }
+
     private async Task Route(NetworkStream stream, HttpRequest request)
     {
         try
@@ -220,7 +239,7 @@ public sealed class LocalHttpServer
 
             if (request.Method == "POST" && request.Path == "/test")
             {
-                await _printer.PrintAsync(EscPosTicketBuilder.BuildRawText("TEST PRINTAGENT ANDROID\nhttp://127.0.0.1:5000\n"));
+                await PrintAndTrackAsync(EscPosTicketBuilder.BuildRawText("TEST PRINTAGENT ANDROID\nhttp://127.0.0.1:5000\n"));
                 await WriteJson(stream, 200, new { status = "printed" });
                 return;
             }
@@ -234,7 +253,7 @@ public sealed class LocalHttpServer
                     return;
                 }
                 var (vid, pid) = GetPrinterOverride(json.RootElement);
-                await _printer.PrintAsync(EscPosTicketBuilder.BuildRawText(textEl.GetString() ?? ""), vid, pid);
+                await PrintAndTrackAsync(EscPosTicketBuilder.BuildRawText(textEl.GetString() ?? ""), vid, pid);
                 await WriteJson(stream, 200, new { status = "printed_with_cut" });
                 return;
             }
@@ -243,7 +262,7 @@ public sealed class LocalHttpServer
             {
                 using var ticketJson = JsonDocument.Parse(request.Body);
                 var (vid, pid) = GetPrinterOverride(ticketJson.RootElement);
-                await _printer.PrintAsync(EscPosTicketBuilder.BuildTicket(request.Body), vid, pid);
+                await PrintAndTrackAsync(EscPosTicketBuilder.BuildTicket(request.Body), vid, pid);
                 await WriteJson(stream, 200, new { status = "printed" });
                 return;
             }
@@ -252,7 +271,7 @@ public sealed class LocalHttpServer
             {
                 using var qrJson = JsonDocument.Parse(request.Body);
                 var (vid, pid) = GetPrinterOverride(qrJson.RootElement);
-                await _printer.PrintAsync(EscPosTicketBuilder.BuildQrText(request.Body), vid, pid);
+                await PrintAndTrackAsync(EscPosTicketBuilder.BuildQrText(request.Body), vid, pid);
                 await WriteJson(stream, 200, new { status = "printed" });
                 return;
             }
@@ -274,7 +293,7 @@ public sealed class LocalHttpServer
 
                 var (vid, pid) = GetPrinterOverride(zplJson.RootElement);
                 var zplData = valoresEl.GetString() ?? "";
-                await _printer.PrintAsync(Encoding.UTF8.GetBytes(zplData), vid, pid);
+                await PrintAndTrackAsync(Encoding.UTF8.GetBytes(zplData), vid, pid);
                 await WriteJson(stream, 200, new { status = "printed" });
                 return;
             }

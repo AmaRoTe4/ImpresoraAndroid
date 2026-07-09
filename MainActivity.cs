@@ -6,8 +6,10 @@ using Android.OS;
 using Android.Provider;
 using Android.Views;
 using Android.Widget;
+using PrintAgentAndroid.Http;
 using PrintAgentAndroid.Printing;
 using PrintAgentAndroid.Services;
+using PrintAgentAndroid.Ui;
 
 namespace PrintAgentAndroid;
 
@@ -17,14 +19,24 @@ public sealed class MainActivity : Activity
     private const string ZplTestPayload = "^XA^FO50,50^ADN,36,20^FDPRINTAGENT TEST^FS^FO50,100^BY2^BCN,80,Y,N,N^FD123456^FS^XZ";
     private const int StatusPollMs = 4000;
 
-    private TextView? _statusBadge;
-    private TextView? _log;
-    private Button? _btnToggleService;
     private readonly ServiceConnection _connection = new();
     private readonly Handler _pollHandler = new(Looper.MainLooper!);
     private bool _polling;
 
-    private TextView? _permissionsBadge;
+    private TextView? _statusPill;
+    private FrameLayout? _circleButton;
+    private TextView? _circleLabel;
+    private TextView? _hintText;
+    private LinearLayout? _statsCard;
+    private TextView? _statPortValue;
+    private TextView? _statJobsValue;
+    private TextView? _statErrorsValue;
+    private TextView? _log;
+
+    private ConfigPanelBuilder? _configPanel;
+    private TestPanelBuilder? _testPanel;
+    private BottomNavBar? _bottomNav;
+    private DrawerPanel? _drawer;
 
     protected override void OnCreate(Bundle? savedInstanceState)
     {
@@ -35,11 +47,7 @@ public sealed class MainActivity : Activity
         RequestNotificationPermissionIfNeeded();
 
         _connection.LogReceived += Log;
-        _connection.Connected += () =>
-        {
-            if (_btnToggleService != null) _btnToggleService.Text = "Detener servicio";
-            RefreshStatus();
-        };
+        _connection.Connected += () => RefreshStatus();
         StartAndBindService();
 
         RefreshStatus();
@@ -47,98 +55,187 @@ public sealed class MainActivity : Activity
 
     private void BuildUi()
     {
-        var root = new LinearLayout(this) { Orientation = Orientation.Vertical };
-        root.SetPadding(24, 24, 24, 24);
+        var root = new FrameLayout(this);
+        root.SetBackgroundColor(new Color(Theme.Background));
+
+        var mainContent = new LinearLayout(this) { Orientation = Orientation.Vertical };
+        mainContent.SetPadding(0, 0, 0, Theme.DpToPxInt(this, 72));
+
+        mainContent.AddView(BuildHeader());
+        mainContent.AddView(BuildCenterArea(), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 0, 1f));
+
+        root.AddView(mainContent, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.MatchParent));
+
+        _bottomNav = new BottomNavBar(this);
+        var navParams = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent) { Gravity = GravityFlags.Bottom };
+        root.AddView(_bottomNav.Root, navParams);
+
+        _configPanel = new ConfigPanelBuilder(this);
+        _testPanel = new TestPanelBuilder(this);
+        var logsView = BuildLogsView();
+        _drawer = new DrawerPanel(this, _configPanel.Root, logsView, _testPanel.Root);
+
+        var metrics = Resources!.DisplayMetrics!;
+        var drawerHeight = (int)(metrics.HeightPixels * 0.65);
+        var drawerParams = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, drawerHeight) { Gravity = GravityFlags.Bottom };
+        root.AddView(_drawer.Root, drawerParams);
+
+        WireDrawerAndNav();
+        WireConfigPanel();
+        WireTestPanel();
+
+        SetContentView(root);
+    }
+
+    private View BuildHeader()
+    {
+        var header = new LinearLayout(this) { Orientation = Orientation.Horizontal };
+        header.SetGravity(GravityFlags.CenterVertical);
+        var padH = Theme.DpToPxInt(this, 20);
+        header.SetPadding(padH, Theme.DpToPxInt(this, 48), padH, Theme.DpToPxInt(this, 16));
 
         var logo = new ImageView(this);
         logo.SetImageResource(Resource.Drawable.bts_logo);
         logo.SetAdjustViewBounds(true);
         logo.SetScaleType(ImageView.ScaleType.FitCenter);
-        logo.LayoutParameters = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 220);
-        root.AddView(logo);
+        var logoSize = Theme.DpToPxInt(this, 32);
+        var logoParams = new LinearLayout.LayoutParams(logoSize, logoSize) { MarginEnd = Theme.DpToPxInt(this, 12) };
+        header.AddView(logo, logoParams);
 
-        _statusBadge = new TextView(this)
+        var titleCol = new LinearLayout(this) { Orientation = Orientation.Vertical };
+        var eyebrow = new TextView(this) { Text = "PRINTSERVER", TextSize = 11 };
+        eyebrow.SetTextColor(new Color(Theme.MutedForeground));
+        eyebrow.SetTypeface(eyebrow.Typeface, TypefaceStyle.Bold);
+        var title = new TextView(this) { Text = "Panel de control", TextSize = 18 };
+        title.SetTextColor(new Color(Theme.Foreground));
+        title.SetTypeface(title.Typeface, TypefaceStyle.Bold);
+        titleCol.AddView(eyebrow);
+        titleCol.AddView(title);
+        header.AddView(titleCol, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WrapContent, 1f));
+
+        _statusPill = ViewFactory.CreateStatusPill(this);
+        header.AddView(_statusPill);
+
+        return header;
+    }
+
+    private View BuildCenterArea()
+    {
+        var centerArea = new LinearLayout(this) { Orientation = Orientation.Vertical };
+        centerArea.SetGravity(GravityFlags.CenterHorizontal);
+        centerArea.SetPadding(Theme.DpToPxInt(this, 24), 0, Theme.DpToPxInt(this, 24), 0);
+
+        var circleSize = Theme.DpToPxInt(this, 220);
+        _circleButton = new FrameLayout(this) { Clickable = true, Focusable = true };
+        _circleButton.Background = ViewFactory.BuildCircleBackground(this, false);
+
+        var circleInner = new LinearLayout(this) { Orientation = Orientation.Vertical };
+        circleInner.SetGravity(GravityFlags.Center);
+        var circleIcon = new TextView(this) { Text = "🖨", TextSize = 32, Gravity = GravityFlags.Center };
+        _circleLabel = new TextView(this) { Text = "SERVIDOR OFF", TextSize = 14, Gravity = GravityFlags.Center };
+        _circleLabel.SetTypeface(_circleLabel.Typeface, TypefaceStyle.Bold);
+        _circleLabel.SetTextColor(new Color(Theme.Foreground));
+        circleInner.AddView(circleIcon);
+        circleInner.AddView(_circleLabel);
+        var innerParams = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.WrapContent) { Gravity = GravityFlags.Center };
+        _circleButton.AddView(circleInner, innerParams);
+
+        _circleButton.Touch += (_, e) =>
         {
-            Text = "Estado: iniciando...",
-            TextSize = 15
+            switch (e.Event!.Action)
+            {
+                case MotionEventActions.Down:
+                    _circleButton.Animate()!.ScaleX(0.95f).ScaleY(0.95f).SetDuration(100).Start();
+                    break;
+                case MotionEventActions.Up:
+                case MotionEventActions.Cancel:
+                    _circleButton.Animate()!.ScaleX(1f).ScaleY(1f).SetDuration(100).Start();
+                    break;
+            }
+            e.Handled = false;
         };
-        _statusBadge.SetPadding(0, 16, 0, 4);
-        root.AddView(_statusBadge);
+        _circleButton.Click += (_, _) => ToggleService();
 
-        _permissionsBadge = new TextView(this) { TextSize = 13 };
-        _permissionsBadge.SetPadding(0, 0, 0, 16);
-        root.AddView(_permissionsBadge);
+        centerArea.AddView(_circleButton, new LinearLayout.LayoutParams(circleSize, circleSize));
 
-        _btnToggleService = new Button(this) { Text = "Detener servicio" };
-        var btnStatus = new Button(this) { Text = "Ver estado" };
-        var btnGrantAll = new Button(this) { Text = "Conceder todos los permisos" };
-        var btnPermission = new Button(this) { Text = "Pedir permiso USB" };
-        var btnBattery = new Button(this) { Text = "Permitir ejecución en segundo plano" };
-        var btnTestEscPos = new Button(this) { Text = "Test térmico (ESC/POS)" };
-        var btnTestZpl = new Button(this) { Text = "Test etiqueta (ZPL)" };
+        _hintText = new TextView(this) { Text = "Toca para iniciar el servidor", TextSize = 13 };
+        _hintText.SetTextColor(new Color(Theme.MutedForeground));
+        _hintText.SetPadding(0, Theme.DpToPxInt(this, 16), 0, 0);
+        centerArea.AddView(_hintText);
 
-        root.AddView(_btnToggleService);
-        root.AddView(btnStatus);
-        root.AddView(btnGrantAll);
-        root.AddView(btnPermission);
-        root.AddView(btnBattery);
-        root.AddView(btnTestEscPos);
-        root.AddView(btnTestZpl);
+        _statsCard = new LinearLayout(this) { Orientation = Orientation.Horizontal, Visibility = ViewStates.Gone };
+        var statsPad = Theme.DpToPxInt(this, 16);
+        _statsCard.SetPadding(statsPad, statsPad, statsPad, statsPad);
+        _statsCard.Background = ViewFactory.RoundedBackground(Theme.Card, Theme.DpToPx(this, 20));
 
-        var logHeader = new TextView(this) { Text = "Registro de actividad", TextSize = 14 };
-        logHeader.SetPadding(0, 24, 0, 8);
-        logHeader.SetTypeface(logHeader.Typeface, TypefaceStyle.Bold);
-        root.AddView(logHeader);
+        var (portCol, portValue) = ViewFactory.CreateStatColumn(this, "Puerto", "5000", Theme.Foreground);
+        _statPortValue = portValue;
+        var (jobsCol, jobsValue) = ViewFactory.CreateStatColumn(this, "Trabajos", "0", Theme.Foreground);
+        _statJobsValue = jobsValue;
+        var (errorsCol, errorsValue) = ViewFactory.CreateStatColumn(this, "Errores", "0", Theme.Destructive);
+        _statErrorsValue = errorsValue;
 
+        var colLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WrapContent, 1f);
+        _statsCard.AddView(portCol, colLp);
+        _statsCard.AddView(BuildSeparator());
+        _statsCard.AddView(jobsCol, new LinearLayout.LayoutParams(colLp));
+        _statsCard.AddView(BuildSeparator());
+        _statsCard.AddView(errorsCol, new LinearLayout.LayoutParams(colLp));
+
+        var statsParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent)
+        {
+            TopMargin = Theme.DpToPxInt(this, 24)
+        };
+        centerArea.AddView(_statsCard, statsParams);
+
+        return centerArea;
+    }
+
+    private View BuildSeparator()
+    {
+        var sep = new View(this);
+        sep.SetBackgroundColor(new Color(Theme.Border));
+        return sep;
+    }
+
+    private View BuildLogsView()
+    {
         _log = new TextView(this)
         {
             Text = "Iniciando PrintAgent Android...",
             TextSize = 13
         };
-        var scroll = new ScrollView(this)
-        {
-            LayoutParameters = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 0, 1f)
-        };
+        _log.SetTextColor(new Color(Theme.MutedForeground));
+        var scroll = new ScrollView(this);
         scroll.AddView(_log);
-        root.AddView(scroll);
+        return scroll;
+    }
 
-        SetContentView(root);
+    private void WireDrawerAndNav()
+    {
+        _bottomNav!.OnTabSelected = kind =>
+        {
+            _drawer!.Toggle(kind);
+            _bottomNav.SetActive(_drawer.Current);
+            if (_drawer.Current != null) RefreshStatus();
+        };
+        _drawer!.OnCloseRequested = () => _bottomNav.SetActive(null);
+    }
 
-        _btnToggleService.Click += (_, _) => ToggleService();
-        btnStatus.Click += (_, _) => RefreshStatus();
-        btnGrantAll.Click += async (_, _) => await GrantAllPermissionsAsync();
-        btnBattery.Click += (_, _) => RequestIgnoreBatteryOptimizations();
-        btnPermission.Click += async (_, _) => await RequestUsbPermissionAsync();
-        btnTestEscPos.Click += async (_, _) =>
-        {
-            var printer = _connection.Service?.Printer;
-            if (printer == null) { Log("Servicio aún no conectado."); return; }
-            try
-            {
-                var bytes = EscPosTicketBuilder.BuildRawText("TEST PRINTAGENT ANDROID (ESC/POS)\nServidor: puerto 5000\n");
-                await printer.PrintAsync(bytes);
-                Log("Prueba ESC/POS impresa.");
-            }
-            catch (Exception ex)
-            {
-                Log("Error imprimiendo ESC/POS: " + ex.Message);
-            }
-        };
-        btnTestZpl.Click += async (_, _) =>
-        {
-            var printer = _connection.Service?.Printer;
-            if (printer == null) { Log("Servicio aún no conectado."); return; }
-            try
-            {
-                var bytes = System.Text.Encoding.UTF8.GetBytes(ZplTestPayload);
-                await printer.PrintAsync(bytes);
-                Log("Prueba ZPL impresa.");
-            }
-            catch (Exception ex)
-            {
-                Log("Error imprimiendo ZPL: " + ex.Message);
-            }
-        };
+    private void WireConfigPanel()
+    {
+        _configPanel!.OnUsbRowTap = () => _ = RequestUsbPermissionAsync();
+        _configPanel.OnNotificationsRowTap = OnNotificationsRowTapped;
+        _configPanel.OnBatteryRowTap = RequestIgnoreBatteryOptimizations;
+        _configPanel.OnNetworkToggle = OnNetworkToggled;
+        _configPanel.OnAutoStartToggle = SetBootReceiverEnabled;
+    }
+
+    private void WireTestPanel()
+    {
+        _testPanel!.OnQuickTextTest = () => _ = RunEscPosTestAsync();
+        _testPanel.OnQuickZplTest = () => _ = RunZplTestAsync();
+        _testPanel.OnSendCustom = (content, isZpl) => _ = SendCustomTestAsync(content, isZpl);
     }
 
     private void RequestNotificationPermissionIfNeeded()
@@ -160,7 +257,30 @@ public sealed class MainActivity : Activity
 
         var granted = grantResults.Length > 0 && grantResults[0] == Permission.Granted;
         Log(granted ? "Permiso de notificaciones concedido." : "Permiso de notificaciones denegado.");
-        UpdatePermissionsBadge();
+        RefreshStatus();
+    }
+
+    private void OnNotificationsRowTapped()
+    {
+        var granted = Build.VERSION.SdkInt < BuildVersionCodes.Tiramisu
+            || CheckSelfPermission(global::Android.Manifest.Permission.PostNotifications) == Permission.Granted;
+
+        if (granted)
+        {
+            var intent = new Intent(Settings.ActionApplicationDetailsSettings, Android.Net.Uri.Parse("package:" + PackageName));
+            StartActivity(intent);
+        }
+        else
+        {
+            RequestNotificationPermissionIfNeeded();
+        }
+    }
+
+    private void OnNetworkToggled(bool listenAll)
+    {
+        _connection.Service?.Server?.Reconfigure(listenAll: listenAll);
+        Log(listenAll ? "Servidor ahora escucha en la red (LAN)." : "Servidor ahora sólo escucha en localhost.");
+        RefreshStatus();
     }
 
     private async Task RequestUsbPermissionAsync()
@@ -178,15 +298,77 @@ public sealed class MainActivity : Activity
         }
         finally
         {
-            UpdatePermissionsBadge();
+            RefreshStatus();
         }
     }
 
-    private async Task GrantAllPermissionsAsync()
+    private ComponentName BootReceiverComponent() =>
+        new(PackageName!, Java.Lang.Class.FromType(typeof(BootReceiver)).Name!);
+
+    private bool IsBootReceiverEnabled()
     {
-        RequestNotificationPermissionIfNeeded();
-        RequestIgnoreBatteryOptimizations();
-        await RequestUsbPermissionAsync();
+        var state = PackageManager!.GetComponentEnabledSetting(BootReceiverComponent());
+        return state != ComponentEnabledState.Disabled;
+    }
+
+    private void SetBootReceiverEnabled(bool enabled)
+    {
+        var newState = enabled ? ComponentEnabledState.Enabled : ComponentEnabledState.Disabled;
+        PackageManager!.SetComponentEnabledSetting(BootReceiverComponent(), newState, ComponentEnableOption.DontKillApp);
+        Log(enabled ? "Inicio automático activado." : "Inicio automático desactivado.");
+        RefreshStatus();
+    }
+
+    private async Task RunEscPosTestAsync()
+    {
+        var printer = _connection.Service?.Printer;
+        if (printer == null) { Log("Servicio aún no conectado."); return; }
+        try
+        {
+            var bytes = EscPosTicketBuilder.BuildRawText("TEST PRINTAGENT ANDROID (ESC/POS)\nServidor: puerto 5000\n");
+            await printer.PrintAsync(bytes);
+            Log("Prueba ESC/POS impresa.");
+        }
+        catch (Exception ex)
+        {
+            Log("Error imprimiendo ESC/POS: " + ex.Message);
+        }
+    }
+
+    private async Task RunZplTestAsync()
+    {
+        var printer = _connection.Service?.Printer;
+        if (printer == null) { Log("Servicio aún no conectado."); return; }
+        try
+        {
+            var bytes = System.Text.Encoding.UTF8.GetBytes(ZplTestPayload);
+            await printer.PrintAsync(bytes);
+            Log("Prueba ZPL impresa.");
+        }
+        catch (Exception ex)
+        {
+            Log("Error imprimiendo ZPL: " + ex.Message);
+        }
+    }
+
+    private async Task SendCustomTestAsync(string content, bool isZpl)
+    {
+        var printer = _connection.Service?.Printer;
+        if (printer == null) { Log("Servicio aún no conectado."); return; }
+        try
+        {
+            var bytes = isZpl
+                ? System.Text.Encoding.UTF8.GetBytes(content)
+                : EscPosTicketBuilder.BuildRawText(content);
+            await printer.PrintAsync(bytes);
+            Log($"Prueba personalizada ({(isZpl ? "ZPL" : "Texto")}) impresa.");
+            _testPanel!.ShowLastSent(content, isZpl);
+            _testPanel.ClearCustomInput();
+        }
+        catch (Exception ex)
+        {
+            Log("Error en prueba personalizada: " + ex.Message);
+        }
     }
 
     private void StartAndBindService()
@@ -238,15 +420,15 @@ public sealed class MainActivity : Activity
         {
             try { UnbindService(_connection); } catch { }
             StopService(new Intent(this, typeof(PrintAgentService)));
-            if (_btnToggleService != null) _btnToggleService.Text = "Iniciar servicio";
+            _connection.Clear();
             Log("Servicio detenido manualmente.");
-            UpdateBadge(running: false);
         }
         else
         {
             StartAndBindService();
             Log("Iniciando servicio...");
         }
+        RefreshStatus();
     }
 
     protected override void OnResume()
@@ -281,51 +463,59 @@ public sealed class MainActivity : Activity
     {
         var service = _connection.Service;
         var printer = service?.Printer;
-        var serverUp = service?.Server != null;
+        var server = service?.Server;
+        var running = printer != null && server != null;
 
-        if (printer == null || !serverUp)
+        UpdateCircleAndPill(running);
+        UpdateStats(running, server);
+        UpdateConfigPanel(printer, server);
+    }
+
+    private void UpdateCircleAndPill(bool running)
+    {
+        RunOnUiThread(() =>
         {
-            UpdateBadge(running: false);
-            UpdatePermissionsBadge();
-            return;
-        }
-
-        var device = printer.FindPrinterDevice();
-        UpdateBadge(running: true, device, printer);
-        UpdatePermissionsBadge();
+            if (_circleButton == null) return;
+            _circleButton.Background = ViewFactory.BuildCircleBackground(this, running);
+            _circleButton.Elevation = Theme.DpToPx(this, running ? 16 : 4);
+            _circleLabel!.Text = running ? "SERVIDOR ON" : "SERVIDOR OFF";
+            _hintText!.Text = running ? "Toca para detener el servidor" : "Toca para iniciar el servidor";
+            ViewFactory.ApplyStatusPill(_statusPill!, running);
+        });
     }
 
-    private void UpdatePermissionsBadge()
+    private void UpdateStats(bool running, LocalHttpServer? server)
     {
-        if (_permissionsBadge == null) return;
+        RunOnUiThread(() =>
+        {
+            if (_statsCard == null) return;
+            _statsCard.Visibility = running ? ViewStates.Visible : ViewStates.Gone;
+            if (server == null) return;
+            _statPortValue!.Text = server.Port.ToString();
+            _statJobsValue!.Text = server.JobsCompleted.ToString();
+            _statErrorsValue!.Text = server.JobsFailed.ToString();
+        });
+    }
 
-        var notifStatus = Build.VERSION.SdkInt < BuildVersionCodes.Tiramisu
-            ? "no aplica"
-            : CheckSelfPermission(global::Android.Manifest.Permission.PostNotifications) == Permission.Granted ? "sí" : "no";
-
-        var batteryStatus = IsIgnoringBatteryOptimizations() ? "sí" : "no";
-
-        var printer = _connection.Service?.Printer;
+    private void UpdateConfigPanel(UsbEscPosPrinter? printer, LocalHttpServer? server)
+    {
         var device = printer?.FindPrinterDevice();
-        var usbStatus = device == null ? "sin impresora detectada" : printer!.HasPermission(device) ? "sí" : "no";
+        var usbGranted = device != null && printer!.HasPermission(device);
+        var notifGranted = Build.VERSION.SdkInt < BuildVersionCodes.Tiramisu
+            || CheckSelfPermission(global::Android.Manifest.Permission.PostNotifications) == Permission.Granted;
+        var autoStartEnabled = IsBootReceiverEnabled();
+        var batteryExempt = IsIgnoringBatteryOptimizations();
 
-        var text = $"Permisos — notificaciones: {notifStatus} | batería exenta: {batteryStatus} | USB: {usbStatus}";
-        RunOnUiThread(() => _permissionsBadge.Text = text);
-    }
-
-    private void UpdateBadge(bool running, global::Android.Hardware.Usb.UsbDevice? device = null, UsbEscPosPrinter? printer = null)
-    {
-        if (_statusBadge == null) return;
-
-        var batteryText = IsIgnoringBatteryOptimizations() ? "batería: exenta" : "batería: SIN exención (puede matar el servicio)";
-
-        var text = !running
-            ? $"Estado: SERVICIO DETENIDO — {batteryText}"
-            : device == null
-                ? $"Estado: servidor activo (puerto 5000) — impresora USB no detectada — {batteryText}"
-                : $"Estado: servidor activo (puerto 5000) — USB VID:{device.VendorId} PID:{device.ProductId} — permiso:{(printer!.HasPermission(device) ? "sí" : "no")} — {batteryText}";
-
-        RunOnUiThread(() => _statusBadge.Text = text);
+        RunOnUiThread(() =>
+        {
+            if (_configPanel == null) return;
+            _configPanel.SetUsbState(usbGranted);
+            _configPanel.SetNotificationsState(notifGranted);
+            _configPanel.SetBatteryState(batteryExempt);
+            _configPanel.SetNetworkState(server?.BindAddress == "0.0.0.0");
+            _configPanel.SetAutoStartState(autoStartEnabled);
+            _configPanel.SetPort(server?.Port ?? 5000);
+        });
     }
 
     private void Log(string message)
@@ -352,5 +542,7 @@ public sealed class MainActivity : Activity
         }
 
         public void OnServiceDisconnected(ComponentName? name) => Service = null;
+
+        public void Clear() => Service = null;
     }
 }
