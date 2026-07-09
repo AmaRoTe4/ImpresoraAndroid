@@ -14,6 +14,9 @@ public sealed class UsbEscPosPrinter : IDisposable
     private PermissionReceiver? _receiver;
     private TaskCompletionSource<bool>? _permissionTcs;
 
+    public int? PreferredVendorId { get; private set; }
+    public int? PreferredProductId { get; private set; }
+
     public UsbEscPosPrinter(Context context, Action<string> log)
     {
         _context = context;
@@ -21,6 +24,12 @@ public sealed class UsbEscPosPrinter : IDisposable
         _usbManager = (UsbManager)context.GetSystemService(Context.UsbService)!;
         _permissionAction = context.PackageName + ".USB_PERMISSION";
         RegisterReceiver();
+    }
+
+    public void SetPreferredPrinter(int? vendorId, int? productId)
+    {
+        PreferredVendorId = vendorId;
+        PreferredProductId = productId;
     }
 
     public IReadOnlyList<object> ListDevices()
@@ -32,27 +41,41 @@ public sealed class UsbEscPosPrinter : IDisposable
                 vendorId = d.VendorId,
                 productId = d.ProductId,
                 hasPermission = HasPermission(d),
-                interfaces = d.InterfaceCount
+                interfaces = d.InterfaceCount,
+                isBulkOutCapable = TryFindBulkOutEndpoint(d, out _, out _)
             })
             .Cast<object>()
             .ToList();
     }
 
-    public UsbDevice? FindPrinterDevice()
+    /// <summary>
+    /// Busca una impresora USB con endpoint BULK OUT. Si se pasan vendorId/productId,
+    /// prioriza ese dispositivo exacto; si no, usa la preferida guardada con
+    /// SetPreferredPrinter; si tampoco hay preferida, devuelve la primera que encuentre.
+    /// </summary>
+    public UsbDevice? FindPrinterDevice(int? vendorId = null, int? productId = null)
     {
-        foreach (var device in _usbManager.DeviceList?.Values ?? Enumerable.Empty<UsbDevice>())
+        var devices = (_usbManager.DeviceList?.Values ?? Enumerable.Empty<UsbDevice>())
+            .Where(d => TryFindBulkOutEndpoint(d, out _, out _))
+            .ToList();
+
+        var wantVendor = vendorId ?? PreferredVendorId;
+        var wantProduct = productId ?? PreferredProductId;
+
+        if (wantVendor.HasValue && wantProduct.HasValue)
         {
-            if (TryFindBulkOutEndpoint(device, out _, out _))
-                return device;
+            var exact = devices.FirstOrDefault(d => d.VendorId == wantVendor.Value && d.ProductId == wantProduct.Value);
+            if (exact != null) return exact;
         }
-        return null;
+
+        return devices.FirstOrDefault();
     }
 
     public bool HasPermission(UsbDevice device) => _usbManager.HasPermission(device);
 
-    public async Task EnsurePermissionAsync()
+    public async Task EnsurePermissionAsync(int? vendorId = null, int? productId = null)
     {
-        var device = FindPrinterDevice() ?? throw new InvalidOperationException("No se detectó ninguna impresora USB con endpoint BULK OUT.");
+        var device = FindPrinterDevice(vendorId, productId) ?? throw new InvalidOperationException("No se detectó ninguna impresora USB con endpoint BULK OUT.");
         if (HasPermission(device)) return;
 
         _permissionTcs = new TaskCompletionSource<bool>();
@@ -70,11 +93,11 @@ public sealed class UsbEscPosPrinter : IDisposable
         await _permissionTcs.Task;
     }
 
-    public async Task PrintAsync(byte[] bytes)
+    public async Task PrintAsync(byte[] bytes, int? vendorId = null, int? productId = null)
     {
-        var device = FindPrinterDevice() ?? throw new InvalidOperationException("Impresora USB no detectada.");
+        var device = FindPrinterDevice(vendorId, productId) ?? throw new InvalidOperationException("Impresora USB no detectada.");
         if (!HasPermission(device))
-            await EnsurePermissionAsync();
+            await EnsurePermissionAsync(vendorId, productId);
 
         if (!TryFindBulkOutEndpoint(device, out var usbInterface, out var endpoint))
             throw new InvalidOperationException("No se encontró endpoint BULK OUT en la impresora.");

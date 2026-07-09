@@ -85,6 +85,23 @@ curl -X POST http://127.0.0.1:5000/print_ticket \
   -d '{"header_lines":["TEST"],"items":[{"description":"PRODUCTO","quantity":1,"unit_price":10}],"total_final":10}'
 ```
 
+## 5.1 Verificar que el server responde (antes de tocar la impresora)
+
+Con la app abierta (o ya en segundo plano con el foreground service activo):
+
+```bash
+adb reverse tcp:5000 tcp:5000
+
+curl -i http://127.0.0.1:5000/
+# debe devolver 200: {"status":"ok","service":"PrintAgent Android"}
+
+curl -i http://127.0.0.1:5000/printers
+# debe devolver 200 con la lista de impresoras USB conectadas (name/vendorId/productId)
+```
+
+Si `/` no responde 200, el problema es del server HTTP (bind/puerto/servicio), no de la
+impresora — no tiene sentido seguir probando impresión hasta que esto ande.
+
 ## 6. Ver logs / diagnosticar un crash
 
 Si la app "abre y se cierra sola":

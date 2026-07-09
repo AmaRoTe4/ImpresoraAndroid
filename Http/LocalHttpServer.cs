@@ -133,6 +133,12 @@ public sealed class LocalHttpServer
     {
         try
         {
+            if (request.Method == "GET" && request.Path == "/")
+            {
+                await WriteJson(stream, 200, new { status = "ok", service = "PrintAgent Android" });
+                return;
+            }
+
             if (request.Method == "GET" && request.Path == "/status")
             {
                 var device = _printer.FindPrinterDevice();
@@ -159,6 +165,8 @@ public sealed class LocalHttpServer
                 {
                     defaultPrinter = "USB",
                     preferredPrinter = "USB",
+                    selectedVendorId = _printer.PreferredVendorId,
+                    selectedProductId = _printer.PreferredProductId,
                     printers = _printer.ListDevices()
                 });
                 return;
@@ -181,12 +189,20 @@ public sealed class LocalHttpServer
 
                 Reconfigure(newPort, host, listenAll);
 
+                if (cfg.TryGetProperty("vendor_id", out var vendorEl) && cfg.TryGetProperty("product_id", out var productEl)
+                    && vendorEl.TryGetInt32(out var vid) && productEl.TryGetInt32(out var pid))
+                {
+                    _printer.SetPreferredPrinter(vid, pid);
+                }
+
                 await WriteJson(stream, 200, new
                 {
                     status = "ok",
                     port = _port,
                     host = _bindAddress.ToString(),
-                    listenAll = Equals(_bindAddress, IPAddress.Any)
+                    listenAll = Equals(_bindAddress, IPAddress.Any),
+                    selectedVendorId = _printer.PreferredVendorId,
+                    selectedProductId = _printer.PreferredProductId
                 });
                 return;
             }
@@ -206,21 +222,26 @@ public sealed class LocalHttpServer
                     await WriteJson(stream, 400, new { error = "Falta campo 'text'" });
                     return;
                 }
-                await _printer.PrintAsync(EscPosTicketBuilder.BuildRawText(textEl.GetString() ?? ""));
+                var (vid, pid) = GetPrinterOverride(json.RootElement);
+                await _printer.PrintAsync(EscPosTicketBuilder.BuildRawText(textEl.GetString() ?? ""), vid, pid);
                 await WriteJson(stream, 200, new { status = "printed_with_cut" });
                 return;
             }
 
             if (request.Method == "POST" && request.Path == "/print_ticket")
             {
-                await _printer.PrintAsync(EscPosTicketBuilder.BuildTicket(request.Body));
+                using var ticketJson = JsonDocument.Parse(request.Body);
+                var (vid, pid) = GetPrinterOverride(ticketJson.RootElement);
+                await _printer.PrintAsync(EscPosTicketBuilder.BuildTicket(request.Body), vid, pid);
                 await WriteJson(stream, 200, new { status = "printed" });
                 return;
             }
 
             if (request.Method == "POST" && (request.Path == "/print_qrtext" || request.Path == "/print_with_qr"))
             {
-                await _printer.PrintAsync(EscPosTicketBuilder.BuildQrText(request.Body));
+                using var qrJson = JsonDocument.Parse(request.Body);
+                var (vid, pid) = GetPrinterOverride(qrJson.RootElement);
+                await _printer.PrintAsync(EscPosTicketBuilder.BuildQrText(request.Body), vid, pid);
                 await WriteJson(stream, 200, new { status = "printed" });
                 return;
             }
@@ -240,8 +261,9 @@ public sealed class LocalHttpServer
                     return;
                 }
 
+                var (vid, pid) = GetPrinterOverride(zplJson.RootElement);
                 var zplData = valoresEl.GetString() ?? "";
-                await _printer.PrintAsync(Encoding.UTF8.GetBytes(zplData));
+                await _printer.PrintAsync(Encoding.UTF8.GetBytes(zplData), vid, pid);
                 await WriteJson(stream, 200, new { status = "printed" });
                 return;
             }
@@ -305,6 +327,17 @@ public sealed class LocalHttpServer
         }
 
         return new HttpRequest(method, path, Encoding.UTF8.GetString(bodyBytes.ToArray()));
+    }
+
+    /// <summary>
+    /// Permite elegir impresora por request (campos opcionales "vendor_id"/"product_id"
+    /// en el JSON) sin afectar la preferencia global seteada en /config.
+    /// </summary>
+    private static (int? vendorId, int? productId) GetPrinterOverride(JsonElement root)
+    {
+        var vid = root.TryGetProperty("vendor_id", out var v) && v.TryGetInt32(out var vv) ? vv : (int?)null;
+        var pid = root.TryGetProperty("product_id", out var p) && p.TryGetInt32(out var pp) ? pp : (int?)null;
+        return (vid, pid);
     }
 
     private static int IndexOf(byte[] buffer, int length, byte[] pattern)
