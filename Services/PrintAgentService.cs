@@ -51,7 +51,7 @@ public sealed class PrintAgentService : Service
 
         var notification = BuildNotification();
         if (Build.VERSION.SdkInt >= BuildVersionCodes.Q)
-            StartForeground(NotificationId, notification, ForegroundService.ConnectedDevice);
+            StartForeground(NotificationId, notification, ForegroundService.TypeConnectedDevice);
         else
             StartForeground(NotificationId, notification);
     }
