@@ -91,4 +91,21 @@ public sealed class PrintAgentService : Service
         Printer?.Dispose();
         base.OnDestroy();
     }
+
+    /// <summary>
+    /// El atributo [Service] de .NET Android no expone stopWithTask="false", así que
+    /// por defecto Android mata este proceso cuando sacan la app de "Recientes" con un
+    /// swipe. Workaround estándar: programar un reinicio casi inmediato vía AlarmManager.
+    /// </summary>
+    public override void OnTaskRemoved(Intent? rootIntent)
+    {
+        var restartIntent = new Intent(ApplicationContext, typeof(PrintAgentService)).SetPackage(PackageName);
+        var restartPendingIntent = PendingIntent.GetService(
+            this, 1, restartIntent, PendingIntentFlags.OneShot | PendingIntentFlags.Immutable);
+
+        var alarmManager = (AlarmManager?)GetSystemService(AlarmService);
+        alarmManager?.Set(AlarmType.ElapsedRealtime, SystemClock.ElapsedRealtime() + 1000, restartPendingIntent);
+
+        base.OnTaskRemoved(rootIntent);
+    }
 }
