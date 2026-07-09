@@ -7,7 +7,7 @@ using PrintAgentAndroid.Printing;
 
 namespace PrintAgentAndroid.Services;
 
-[Service(Exported = false, Label = "PrintAgent Android - Servicio", ForegroundServiceType = ForegroundService.TypeDataSync)]
+[Service(Exported = false, Label = "PrintAgent Android - Servicio", ForegroundServiceType = ForegroundService.TypeConnectedDevice)]
 public sealed class PrintAgentService : Service
 {
     private const string ChannelId = "printagent_channel";
@@ -53,7 +53,7 @@ public sealed class PrintAgentService : Service
 
             var notification = BuildNotification();
             if (Build.VERSION.SdkInt >= BuildVersionCodes.Q)
-                StartForeground(NotificationId, notification, ForegroundService.TypeDataSync);
+                StartForeground(NotificationId, notification, ForegroundService.TypeConnectedDevice);
             else
                 StartForeground(NotificationId, notification);
         }

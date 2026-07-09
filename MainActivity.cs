@@ -1,7 +1,7 @@
 using Android.App;
 using Android.Content;
+using Android.Content.PM;
 using Android.Graphics;
-using Android.Net;
 using Android.OS;
 using Android.Provider;
 using Android.Views;
@@ -24,10 +24,29 @@ public sealed class MainActivity : Activity
     private readonly Handler _pollHandler = new(Looper.MainLooper!);
     private bool _polling;
 
+    private TextView? _permissionsBadge;
+
     protected override void OnCreate(Bundle? savedInstanceState)
     {
         base.OnCreate(savedInstanceState);
 
+        BuildUi();
+
+        RequestNotificationPermissionIfNeeded();
+
+        _connection.LogReceived += Log;
+        _connection.Connected += () =>
+        {
+            if (_btnToggleService != null) _btnToggleService.Text = "Detener servicio";
+            RefreshStatus();
+        };
+        StartAndBindService();
+
+        RefreshStatus();
+    }
+
+    private void BuildUi()
+    {
         var root = new LinearLayout(this) { Orientation = Orientation.Vertical };
         root.SetPadding(24, 24, 24, 24);
 
@@ -43,18 +62,24 @@ public sealed class MainActivity : Activity
             Text = "Estado: iniciando...",
             TextSize = 15
         };
-        _statusBadge.SetPadding(0, 16, 0, 16);
+        _statusBadge.SetPadding(0, 16, 0, 4);
         root.AddView(_statusBadge);
+
+        _permissionsBadge = new TextView(this) { TextSize = 13 };
+        _permissionsBadge.SetPadding(0, 0, 0, 16);
+        root.AddView(_permissionsBadge);
 
         _btnToggleService = new Button(this) { Text = "Detener servicio" };
         var btnStatus = new Button(this) { Text = "Ver estado" };
+        var btnGrantAll = new Button(this) { Text = "Conceder todos los permisos" };
         var btnPermission = new Button(this) { Text = "Pedir permiso USB" };
         var btnBattery = new Button(this) { Text = "Permitir ejecución en segundo plano" };
-        var btnTestEscPos = new Button(this) { Text = "Imprimir prueba (ESC/POS ticket)" };
-        var btnTestZpl = new Button(this) { Text = "Imprimir prueba (ZPL etiqueta)" };
+        var btnTestEscPos = new Button(this) { Text = "Test térmico (ESC/POS)" };
+        var btnTestZpl = new Button(this) { Text = "Test etiqueta (ZPL)" };
 
         root.AddView(_btnToggleService);
         root.AddView(btnStatus);
+        root.AddView(btnGrantAll);
         root.AddView(btnPermission);
         root.AddView(btnBattery);
         root.AddView(btnTestEscPos);
@@ -79,34 +104,11 @@ public sealed class MainActivity : Activity
 
         SetContentView(root);
 
-        if (Build.VERSION.SdkInt >= BuildVersionCodes.Tiramisu)
-            RequestPermissions(new[] { global::Android.Manifest.Permission.PostNotifications }, 100);
-
-        _connection.LogReceived += Log;
-        _connection.Connected += () =>
-        {
-            if (_btnToggleService != null) _btnToggleService.Text = "Detener servicio";
-            RefreshStatus();
-        };
-        StartAndBindService();
-
         _btnToggleService.Click += (_, _) => ToggleService();
         btnStatus.Click += (_, _) => RefreshStatus();
+        btnGrantAll.Click += async (_, _) => await GrantAllPermissionsAsync();
         btnBattery.Click += (_, _) => RequestIgnoreBatteryOptimizations();
-        btnPermission.Click += async (_, _) =>
-        {
-            var printer = _connection.Service?.Printer;
-            if (printer == null) { Log("Servicio aún no conectado."); return; }
-            try
-            {
-                await printer.EnsurePermissionAsync();
-                Log("Permiso USB OK.");
-            }
-            catch (Exception ex)
-            {
-                Log("Error permiso USB: " + ex.Message);
-            }
-        };
+        btnPermission.Click += async (_, _) => await RequestUsbPermissionAsync();
         btnTestEscPos.Click += async (_, _) =>
         {
             var printer = _connection.Service?.Printer;
@@ -137,8 +139,54 @@ public sealed class MainActivity : Activity
                 Log("Error imprimiendo ZPL: " + ex.Message);
             }
         };
+    }
 
-        RefreshStatus();
+    private void RequestNotificationPermissionIfNeeded()
+    {
+        if (Build.VERSION.SdkInt < BuildVersionCodes.Tiramisu) return;
+
+        if (CheckSelfPermission(global::Android.Manifest.Permission.PostNotifications) == Permission.Granted)
+        {
+            Log("Permiso de notificaciones ya concedido.");
+            return;
+        }
+
+        RequestPermissions(new[] { global::Android.Manifest.Permission.PostNotifications }, 100);
+    }
+
+    public override void OnRequestPermissionsResult(int requestCode, string[] permissions, Permission[] grantResults)
+    {
+        base.OnRequestPermissionsResult(requestCode, permissions, grantResults);
+
+        var granted = grantResults.Length > 0 && grantResults[0] == Permission.Granted;
+        Log(granted ? "Permiso de notificaciones concedido." : "Permiso de notificaciones denegado.");
+        UpdatePermissionsBadge();
+    }
+
+    private async Task RequestUsbPermissionAsync()
+    {
+        var printer = _connection.Service?.Printer;
+        if (printer == null) { Log("Servicio aún no conectado."); return; }
+        try
+        {
+            await printer.EnsurePermissionAsync();
+            Log("Permiso USB OK.");
+        }
+        catch (Exception ex)
+        {
+            Log("Error permiso USB: " + ex.Message);
+        }
+        finally
+        {
+            UpdatePermissionsBadge();
+        }
+    }
+
+    private async Task GrantAllPermissionsAsync()
+    {
+        RequestNotificationPermissionIfNeeded();
+        RequestIgnoreBatteryOptimizations();
+        await RequestUsbPermissionAsync();
     }
 
     private void StartAndBindService()
@@ -175,7 +223,7 @@ public sealed class MainActivity : Activity
 
         try
         {
-            var intent = new Intent(Settings.ActionRequestIgnoreBatteryOptimizations, Uri.Parse("package:" + PackageName));
+            var intent = new Intent(Settings.ActionRequestIgnoreBatteryOptimizations, Android.Net.Uri.Parse("package:" + PackageName));
             StartActivity(intent);
         }
         catch (Exception ex)
@@ -238,11 +286,31 @@ public sealed class MainActivity : Activity
         if (printer == null || !serverUp)
         {
             UpdateBadge(running: false);
+            UpdatePermissionsBadge();
             return;
         }
 
         var device = printer.FindPrinterDevice();
         UpdateBadge(running: true, device, printer);
+        UpdatePermissionsBadge();
+    }
+
+    private void UpdatePermissionsBadge()
+    {
+        if (_permissionsBadge == null) return;
+
+        var notifStatus = Build.VERSION.SdkInt < BuildVersionCodes.Tiramisu
+            ? "no aplica"
+            : CheckSelfPermission(global::Android.Manifest.Permission.PostNotifications) == Permission.Granted ? "sí" : "no";
+
+        var batteryStatus = IsIgnoringBatteryOptimizations() ? "sí" : "no";
+
+        var printer = _connection.Service?.Printer;
+        var device = printer?.FindPrinterDevice();
+        var usbStatus = device == null ? "sin impresora detectada" : printer!.HasPermission(device) ? "sí" : "no";
+
+        var text = $"Permisos — notificaciones: {notifStatus} | batería exenta: {batteryStatus} | USB: {usbStatus}";
+        RunOnUiThread(() => _permissionsBadge.Text = text);
     }
 
     private void UpdateBadge(bool running, global::Android.Hardware.Usb.UsbDevice? device = null, UsbEscPosPrinter? printer = null)
