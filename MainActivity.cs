@@ -13,7 +13,7 @@ using PrintAgentAndroid.Ui;
 
 namespace PrintAgentAndroid;
 
-[Activity(Label = "PrintAgent Android", MainLauncher = true, Exported = true)]
+[Activity(Label = "PrintAgent Android", MainLauncher = true, Exported = true, Theme = "@android:style/Theme.DeviceDefault.NoActionBar")]
 public sealed class MainActivity : Activity
 {
     private const string ZplTestPayload = "^XA^FO50,50^ADN,36,20^FDPRINTAGENT TEST^FS^FO50,100^BY2^BCN,80,Y,N,N^FD123456^FS^XZ";
@@ -23,6 +23,7 @@ public sealed class MainActivity : Activity
     private readonly Handler _pollHandler = new(Looper.MainLooper!);
     private bool _polling;
 
+    private View? _headerView;
     private TextView? _statusPill;
     private FrameLayout? _circleButton;
     private TextView? _circleLabel;
@@ -61,7 +62,9 @@ public sealed class MainActivity : Activity
         var mainContent = new LinearLayout(this) { Orientation = Orientation.Vertical };
         mainContent.SetPadding(0, 0, 0, AppTheme.DpToPxInt(this, 72));
 
-        mainContent.AddView(BuildHeader());
+        _headerView = BuildHeader();
+        var headerBaseTop = _headerView.PaddingTop;
+        mainContent.AddView(_headerView);
         mainContent.AddView(BuildCenterArea(), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 0, 1f));
 
         root.AddView(mainContent, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.MatchParent));
@@ -79,6 +82,8 @@ public sealed class MainActivity : Activity
         var drawerHeight = (int)(metrics.HeightPixels * 0.65);
         var drawerParams = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, drawerHeight) { Gravity = GravityFlags.Bottom };
         root.AddView(_drawer.Root, drawerParams);
+
+        root.SetOnApplyWindowInsetsListener(new InsetsListener(_headerView, headerBaseTop, _bottomNav, _drawer));
 
         WireDrawerAndNav();
         WireConfigPanel();
@@ -229,6 +234,14 @@ public sealed class MainActivity : Activity
         _configPanel.OnBatteryRowTap = RequestIgnoreBatteryOptimizations;
         _configPanel.OnNetworkToggle = OnNetworkToggled;
         _configPanel.OnAutoStartToggle = SetBootReceiverEnabled;
+        _configPanel.OnPrinterSelected = OnPrinterSelected;
+    }
+
+    private void OnPrinterSelected(int vendorId, int productId)
+    {
+        _connection.Service?.Printer?.SetPreferredPrinter(vendorId, productId);
+        Log($"Impresora preferida: USB {vendorId}:{productId}");
+        RefreshStatus();
     }
 
     private void WireTestPanel()
@@ -505,6 +518,9 @@ public sealed class MainActivity : Activity
             || CheckSelfPermission(global::Android.Manifest.Permission.PostNotifications) == Permission.Granted;
         var autoStartEnabled = IsBootReceiverEnabled();
         var batteryExempt = IsIgnoringBatteryOptimizations();
+        var printers = printer?.ListDevicesDetailed()
+            .Select(p => (p.FriendlyName, p.VendorId, p.ProductId, p.HasPermission, p.IsSelected))
+            .ToList() ?? new List<(string, int, int, bool, bool)>();
 
         RunOnUiThread(() =>
         {
@@ -515,6 +531,7 @@ public sealed class MainActivity : Activity
             _configPanel.SetNetworkState(server?.BindAddress == "0.0.0.0");
             _configPanel.SetAutoStartState(autoStartEnabled);
             _configPanel.SetPort(server?.Port ?? 5000);
+            _configPanel.SetPrinters(printers);
         });
     }
 
@@ -544,5 +561,29 @@ public sealed class MainActivity : Activity
         public void OnServiceDisconnected(ComponentName? name) => Service = null;
 
         public void Clear() => Service = null;
+    }
+
+    private sealed class InsetsListener : Java.Lang.Object, View.IOnApplyWindowInsetsListener
+    {
+        private readonly View _header;
+        private readonly int _headerBaseTop;
+        private readonly BottomNavBar _bottomNav;
+        private readonly DrawerPanel _drawer;
+
+        public InsetsListener(View header, int headerBaseTop, BottomNavBar bottomNav, DrawerPanel drawer)
+        {
+            _header = header;
+            _headerBaseTop = headerBaseTop;
+            _bottomNav = bottomNav;
+            _drawer = drawer;
+        }
+
+        public WindowInsets OnApplyWindowInsets(View v, WindowInsets insets)
+        {
+            _header.SetPadding(_header.PaddingLeft, _headerBaseTop + insets.SystemWindowInsetTop, _header.PaddingRight, _header.PaddingBottom);
+            _bottomNav.ApplyBottomInset(insets.SystemWindowInsetBottom);
+            _drawer.ApplyBottomInset(insets.SystemWindowInsetBottom);
+            return insets;
+        }
     }
 }

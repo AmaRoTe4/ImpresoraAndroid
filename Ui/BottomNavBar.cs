@@ -11,12 +11,14 @@ public sealed class BottomNavBar
     public Action<PanelKind>? OnTabSelected;
 
     private readonly Dictionary<PanelKind, TextView> _labels = new();
+    private readonly int _basePaddingBottom;
 
     public BottomNavBar(Context context)
     {
         var bar = new LinearLayout(context) { Orientation = Orientation.Horizontal };
         bar.Background = ViewFactory.RoundedBackground(AppTheme.Card, 0);
         var padV = AppTheme.DpToPxInt(context, 12);
+        _basePaddingBottom = padV;
         bar.SetPadding(0, padV, 0, padV);
 
         AddTab(context, bar, PanelKind.Config, "Config");
@@ -44,5 +46,10 @@ public sealed class BottomNavBar
     {
         foreach (var (k, tv) in _labels)
             tv.SetTextColor(new Color(k == kind ? AppTheme.Accent : AppTheme.MutedForeground));
+    }
+
+    public void ApplyBottomInset(int insetPx)
+    {
+        Root.SetPadding(Root.PaddingLeft, Root.PaddingTop, Root.PaddingRight, _basePaddingBottom + insetPx);
     }
 }

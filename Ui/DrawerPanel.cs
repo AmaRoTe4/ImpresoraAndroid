@@ -23,6 +23,7 @@ public sealed class DrawerPanel
     private readonly View _configView;
     private readonly View _logsView;
     private readonly View _testView;
+    private readonly FrameLayout _contentContainer;
     private PanelKind? _current;
 
     public DrawerPanel(Context context, View configView, View logsView, View testView)
@@ -80,11 +81,11 @@ public sealed class DrawerPanel
         headerRow.AddView(closeBtn);
         column.AddView(headerRow);
 
-        var contentContainer = new FrameLayout(context);
-        contentContainer.AddView(_configView);
-        contentContainer.AddView(_logsView);
-        contentContainer.AddView(_testView);
-        column.AddView(contentContainer, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 0, 1f));
+        _contentContainer = new FrameLayout(context);
+        _contentContainer.AddView(_configView);
+        _contentContainer.AddView(_logsView);
+        _contentContainer.AddView(_testView);
+        column.AddView(_contentContainer, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 0, 1f));
 
         Root.AddView(column, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.MatchParent));
     }
@@ -114,5 +115,10 @@ public sealed class DrawerPanel
     {
         if (_current == kind) Hide();
         else Show(kind);
+    }
+
+    public void ApplyBottomInset(int insetPx)
+    {
+        _contentContainer.SetPadding(0, 0, 0, insetPx);
     }
 }

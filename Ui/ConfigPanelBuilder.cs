@@ -14,6 +14,7 @@ public sealed class ConfigPanelBuilder
     public Action? OnBatteryRowTap;
     public Action<bool>? OnNetworkToggle;
     public Action<bool>? OnAutoStartToggle;
+    public Action<int, int>? OnPrinterSelected;
 
     private readonly Context _context;
     private readonly TextView _usbStatus;
@@ -22,6 +23,7 @@ public sealed class ConfigPanelBuilder
     private readonly Switch _networkSwitch;
     private readonly Switch _autoStartSwitch;
     private readonly TextView _portValue;
+    private readonly LinearLayout _printersContainer;
     private bool _suppress;
 
     public ConfigPanelBuilder(Context context)
@@ -61,6 +63,14 @@ public sealed class ConfigPanelBuilder
         _batteryStatus = batteryStatus;
         batteryRow.Click += (_, _) => OnBatteryRowTap?.Invoke();
         column.AddView(batteryRow, RowParams(context, 12));
+
+        var printersLabel = new TextView(context) { Text = "Impresoras detectadas", TextSize = 12 };
+        printersLabel.SetTextColor(new Color(AppTheme.MutedForeground));
+        printersLabel.SetPadding(0, AppTheme.DpToPxInt(context, 20), 0, AppTheme.DpToPxInt(context, 8));
+        column.AddView(printersLabel);
+
+        _printersContainer = new LinearLayout(context) { Orientation = Orientation.Vertical };
+        column.AddView(_printersContainer);
 
         var portRow = new LinearLayout(context) { Orientation = Orientation.Horizontal };
         portRow.SetGravity(GravityFlags.CenterVertical);
@@ -115,6 +125,31 @@ public sealed class ConfigPanelBuilder
     }
 
     public void SetPort(int port) => _portValue.Text = port.ToString();
+
+    public void SetPrinters(IReadOnlyList<(string Name, int VendorId, int ProductId, bool HasPermission, bool IsSelected)> printers)
+    {
+        _printersContainer.RemoveAllViews();
+
+        if (printers.Count == 0)
+        {
+            var empty = new TextView(_context) { Text = "Sin impresoras USB conectadas", TextSize = 13 };
+            empty.SetTextColor(new Color(AppTheme.MutedForeground));
+            _printersContainer.AddView(empty);
+            return;
+        }
+
+        var first = true;
+        foreach (var printer in printers)
+        {
+            var desc = printer.HasPermission ? "Permiso concedido" : "Sin permiso — tocá para pedirlo";
+            var (row, status) = BuildInfoRow(printer.Name, desc);
+            status.Text = printer.IsSelected ? "Preferida" : "Elegir";
+            status.SetTextColor(new Color(printer.IsSelected ? AppTheme.Accent : AppTheme.MutedForeground));
+            row.Click += (_, _) => OnPrinterSelected?.Invoke(printer.VendorId, printer.ProductId);
+            _printersContainer.AddView(row, RowParams(_context, first ? 0 : 8));
+            first = false;
+        }
+    }
 
     private static LinearLayout.LayoutParams RowParams(Context context, int marginTopDp) =>
         new(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent) { TopMargin = AppTheme.DpToPxInt(context, marginTopDp) };
