@@ -3,7 +3,7 @@ using Android.Util;
 
 namespace PrintAgentAndroid.Ui;
 
-public static class Theme
+public static class AppTheme
 {
     public const int Background = unchecked((int)0xFF0D0F14);
     public const int Card = unchecked((int)0xFF161920);

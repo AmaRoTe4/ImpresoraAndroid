@@ -15,8 +15,8 @@ public sealed class BottomNavBar
     public BottomNavBar(Context context)
     {
         var bar = new LinearLayout(context) { Orientation = Orientation.Horizontal };
-        bar.Background = ViewFactory.RoundedBackground(Theme.Card, 0);
-        var padV = Theme.DpToPxInt(context, 12);
+        bar.Background = ViewFactory.RoundedBackground(AppTheme.Card, 0);
+        var padV = AppTheme.DpToPxInt(context, 12);
         bar.SetPadding(0, padV, 0, padV);
 
         AddTab(context, bar, PanelKind.Config, "Config");
@@ -32,7 +32,7 @@ public sealed class BottomNavBar
         tab.SetGravity(GravityFlags.CenterHorizontal);
 
         var text = new TextView(context) { Text = label, TextSize = 12 };
-        text.SetTextColor(new Color(Theme.MutedForeground));
+        text.SetTextColor(new Color(AppTheme.MutedForeground));
         tab.AddView(text);
         tab.Click += (_, _) => OnTabSelected?.Invoke(kind);
 
@@ -43,6 +43,6 @@ public sealed class BottomNavBar
     public void SetActive(PanelKind? kind)
     {
         foreach (var (k, tv) in _labels)
-            tv.SetTextColor(new Color(k == kind ? Theme.Accent : Theme.MutedForeground));
+            tv.SetTextColor(new Color(k == kind ? AppTheme.Accent : AppTheme.MutedForeground));
     }
 }

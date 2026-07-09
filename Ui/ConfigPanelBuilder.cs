@@ -29,7 +29,7 @@ public sealed class ConfigPanelBuilder
         _context = context;
         var scroll = new ScrollView(context);
         var column = new LinearLayout(context) { Orientation = Orientation.Vertical };
-        column.SetPadding(0, 0, 0, Theme.DpToPxInt(context, 24));
+        column.SetPadding(0, 0, 0, AppTheme.DpToPxInt(context, 24));
 
         var (usbRow, usbStatus) = BuildInfoRow("Acceso USB", "Permitir impresión por USB");
         _usbStatus = usbStatus;
@@ -64,17 +64,17 @@ public sealed class ConfigPanelBuilder
 
         var portRow = new LinearLayout(context) { Orientation = Orientation.Horizontal };
         portRow.SetGravity(GravityFlags.CenterVertical);
-        var pad = Theme.DpToPxInt(context, 16);
+        var pad = AppTheme.DpToPxInt(context, 16);
         portRow.SetPadding(pad, pad, pad, pad);
-        portRow.Background = ViewFactory.RoundedBackground(Theme.Muted, Theme.DpToPx(context, 16));
+        portRow.Background = ViewFactory.RoundedBackground(AppTheme.Muted, AppTheme.DpToPx(context, 16));
 
         var portLabel = new TextView(context) { Text = "Puerto de escucha", TextSize = 14 };
-        portLabel.SetTextColor(new Color(Theme.Foreground));
+        portLabel.SetTextColor(new Color(AppTheme.Foreground));
         portRow.AddView(portLabel, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WrapContent, 1f));
 
         _portValue = new TextView(context) { TextSize = 14 };
         _portValue.SetTypeface(Typeface.Monospace, TypefaceStyle.Bold);
-        _portValue.SetTextColor(new Color(Theme.Accent));
+        _portValue.SetTextColor(new Color(AppTheme.Accent));
         portRow.AddView(_portValue);
         column.AddView(portRow, RowParams(context, 12));
 
@@ -85,19 +85,19 @@ public sealed class ConfigPanelBuilder
     public void SetUsbState(bool granted)
     {
         _usbStatus.Text = granted ? "Concedido" : "Toca para conceder";
-        _usbStatus.SetTextColor(new Color(granted ? Theme.Accent : Theme.MutedForeground));
+        _usbStatus.SetTextColor(new Color(granted ? AppTheme.Accent : AppTheme.MutedForeground));
     }
 
     public void SetNotificationsState(bool granted)
     {
         _notifStatus.Text = granted ? "Concedido" : "Toca para conceder";
-        _notifStatus.SetTextColor(new Color(granted ? Theme.Accent : Theme.MutedForeground));
+        _notifStatus.SetTextColor(new Color(granted ? AppTheme.Accent : AppTheme.MutedForeground));
     }
 
     public void SetBatteryState(bool exempt)
     {
         _batteryStatus.Text = exempt ? "Exenta" : "Toca para conceder";
-        _batteryStatus.SetTextColor(new Color(exempt ? Theme.Accent : Theme.MutedForeground));
+        _batteryStatus.SetTextColor(new Color(exempt ? AppTheme.Accent : AppTheme.MutedForeground));
     }
 
     public void SetNetworkState(bool listenAll)
@@ -117,21 +117,21 @@ public sealed class ConfigPanelBuilder
     public void SetPort(int port) => _portValue.Text = port.ToString();
 
     private static LinearLayout.LayoutParams RowParams(Context context, int marginTopDp) =>
-        new(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent) { TopMargin = Theme.DpToPxInt(context, marginTopDp) };
+        new(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent) { TopMargin = AppTheme.DpToPxInt(context, marginTopDp) };
 
     private (LinearLayout row, TextView status) BuildInfoRow(string label, string desc)
     {
         var row = new LinearLayout(_context) { Orientation = Orientation.Horizontal, Clickable = true, Focusable = true };
         row.SetGravity(GravityFlags.CenterVertical);
-        var pad = Theme.DpToPxInt(_context, 16);
+        var pad = AppTheme.DpToPxInt(_context, 16);
         row.SetPadding(pad, pad, pad, pad);
-        row.Background = ViewFactory.RoundedBackground(Theme.Muted, Theme.DpToPx(_context, 16));
+        row.Background = ViewFactory.RoundedBackground(AppTheme.Muted, AppTheme.DpToPx(_context, 16));
 
         var textCol = new LinearLayout(_context) { Orientation = Orientation.Vertical };
         var lbl = new TextView(_context) { Text = label, TextSize = 14 };
-        lbl.SetTextColor(new Color(Theme.Foreground));
+        lbl.SetTextColor(new Color(AppTheme.Foreground));
         var descTv = new TextView(_context) { Text = desc, TextSize = 12 };
-        descTv.SetTextColor(new Color(Theme.MutedForeground));
+        descTv.SetTextColor(new Color(AppTheme.MutedForeground));
         textCol.AddView(lbl);
         textCol.AddView(descTv);
         row.AddView(textCol, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WrapContent, 1f));
@@ -145,15 +145,15 @@ public sealed class ConfigPanelBuilder
     {
         var row = new LinearLayout(_context) { Orientation = Orientation.Horizontal };
         row.SetGravity(GravityFlags.CenterVertical);
-        var pad = Theme.DpToPxInt(_context, 16);
+        var pad = AppTheme.DpToPxInt(_context, 16);
         row.SetPadding(pad, pad, pad, pad);
-        row.Background = ViewFactory.RoundedBackground(Theme.Muted, Theme.DpToPx(_context, 16));
+        row.Background = ViewFactory.RoundedBackground(AppTheme.Muted, AppTheme.DpToPx(_context, 16));
 
         var textCol = new LinearLayout(_context) { Orientation = Orientation.Vertical };
         var lbl = new TextView(_context) { Text = label, TextSize = 14 };
-        lbl.SetTextColor(new Color(Theme.Foreground));
+        lbl.SetTextColor(new Color(AppTheme.Foreground));
         var descTv = new TextView(_context) { Text = desc, TextSize = 12 };
-        descTv.SetTextColor(new Color(Theme.MutedForeground));
+        descTv.SetTextColor(new Color(AppTheme.MutedForeground));
         textCol.AddView(lbl);
         textCol.AddView(descTv);
         row.AddView(textCol, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WrapContent, 1f));

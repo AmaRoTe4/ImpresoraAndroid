@@ -40,11 +40,11 @@ public static class ViewFactory
         var gd = new GradientDrawable();
         gd.SetShape(ShapeType.Oval);
         gd.SetGradientType(GradientType.RadialGradient);
-        gd.SetGradientRadius(Theme.DpToPx(context, 110));
+        gd.SetGradientRadius(AppTheme.DpToPx(context, 110));
         gd.SetGradientCenter(0.5f, 0.4f);
         gd.SetColors(active
-            ? new[] { Theme.AccentMid, Theme.AccentDark }
-            : new[] { Theme.InactiveGradFrom, Theme.InactiveGradTo });
+            ? new[] { AppTheme.AccentMid, AppTheme.AccentDark }
+            : new[] { AppTheme.InactiveGradFrom, AppTheme.InactiveGradTo });
         return gd;
     }
 
@@ -52,8 +52,8 @@ public static class ViewFactory
     {
         var tv = new TextView(context) { TextSize = 12 };
         tv.SetTypeface(tv.Typeface, TypefaceStyle.Bold);
-        var padH = Theme.DpToPxInt(context, 12);
-        var padV = Theme.DpToPxInt(context, 6);
+        var padH = AppTheme.DpToPxInt(context, 12);
+        var padV = AppTheme.DpToPxInt(context, 6);
         tv.SetPadding(padH, padV, padH, padV);
         return tv;
     }
@@ -61,8 +61,8 @@ public static class ViewFactory
     public static void ApplyStatusPill(TextView pill, bool active)
     {
         pill.Text = active ? "Activo" : "Inactivo";
-        pill.SetTextColor(new Color(active ? Theme.Accent : Theme.Destructive));
-        pill.Background = PillBackground(active ? Theme.AccentPillBg : Theme.DestructivePillBg);
+        pill.SetTextColor(new Color(active ? AppTheme.Accent : AppTheme.Destructive));
+        pill.Background = PillBackground(active ? AppTheme.AccentPillBg : AppTheme.DestructivePillBg);
     }
 
     public static ColorStateList SwitchTint(int onColor, int offColor)
@@ -79,17 +79,17 @@ public static class ViewFactory
     public static Switch CreateTintedSwitch(Context context)
     {
         var sw = new Switch(context);
-        sw.TrackTintList = SwitchTint(Theme.Accent, Theme.SwitchOffTrack);
+        sw.TrackTintList = SwitchTint(AppTheme.Accent, AppTheme.SwitchOffTrack);
         return sw;
     }
 
     public static (LinearLayout column, TextView valueView) CreateStatColumn(Context context, string label, string value, int valueColor)
     {
-        var col = new LinearLayout(context) { Orientation = Orientation.Vertical };
+        var col = new LinearLayout(context) { Orientation = global::Android.Widget.Orientation.Vertical };
         col.SetGravity(GravityFlags.CenterHorizontal);
 
         var lbl = new TextView(context) { Text = label, TextSize = 11 };
-        lbl.SetTextColor(new Color(Theme.MutedForeground));
+        lbl.SetTextColor(new Color(AppTheme.MutedForeground));
         col.AddView(lbl);
 
         var val = new TextView(context) { Text = value, TextSize = 15 };

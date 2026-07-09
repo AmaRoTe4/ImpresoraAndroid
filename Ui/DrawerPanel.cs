@@ -32,10 +32,10 @@ public sealed class DrawerPanel
         _testView = testView;
 
         Root = new FrameLayout(context) { Visibility = ViewStates.Gone };
-        var r = Theme.DpToPx(context, 24);
+        var r = AppTheme.DpToPx(context, 24);
         var bg = new GradientDrawable();
         bg.SetShape(ShapeType.Rectangle);
-        bg.SetColor(new Color(Theme.Card));
+        bg.SetColor(new Color(AppTheme.Card));
         bg.SetCornerRadii(new[] { r, r, r, r, 0f, 0f, 0f, 0f });
         Root.Background = bg;
 
@@ -46,32 +46,32 @@ public sealed class DrawerPanel
         var handle = new View(context);
         var handleBg = new GradientDrawable();
         handleBg.SetShape(ShapeType.Rectangle);
-        handleBg.SetCornerRadius(Theme.DpToPx(context, 2));
-        handleBg.SetColor(new Color(Theme.Border));
+        handleBg.SetCornerRadius(AppTheme.DpToPx(context, 2));
+        handleBg.SetColor(new Color(AppTheme.Border));
         handle.Background = handleBg;
-        var handleParams = new LinearLayout.LayoutParams(Theme.DpToPxInt(context, 40), Theme.DpToPxInt(context, 4))
+        var handleParams = new LinearLayout.LayoutParams(AppTheme.DpToPxInt(context, 40), AppTheme.DpToPxInt(context, 4))
         {
-            TopMargin = Theme.DpToPxInt(context, 10),
-            BottomMargin = Theme.DpToPxInt(context, 8)
+            TopMargin = AppTheme.DpToPxInt(context, 10),
+            BottomMargin = AppTheme.DpToPxInt(context, 8)
         };
         handleRow.AddView(handle, handleParams);
         column.AddView(handleRow);
 
         var headerRow = new LinearLayout(context) { Orientation = Orientation.Horizontal };
         headerRow.SetGravity(GravityFlags.CenterVertical);
-        var padH = Theme.DpToPxInt(context, 20);
-        headerRow.SetPadding(padH, 0, padH, Theme.DpToPxInt(context, 12));
+        var padH = AppTheme.DpToPxInt(context, 20);
+        headerRow.SetPadding(padH, 0, padH, AppTheme.DpToPxInt(context, 12));
 
         _title = new TextView(context) { TextSize = 16 };
-        _title.SetTextColor(new Color(Theme.Foreground));
+        _title.SetTextColor(new Color(AppTheme.Foreground));
         _title.SetTypeface(_title.Typeface, TypefaceStyle.Bold);
         headerRow.AddView(_title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WrapContent, 1f));
 
-        var closePad = Theme.DpToPxInt(context, 8);
+        var closePad = AppTheme.DpToPxInt(context, 8);
         var closeBtn = new TextView(context) { Text = "✕", TextSize = 14, Clickable = true, Focusable = true };
-        closeBtn.SetTextColor(new Color(Theme.MutedForeground));
+        closeBtn.SetTextColor(new Color(AppTheme.MutedForeground));
         closeBtn.SetPadding(closePad, closePad, closePad, closePad);
-        closeBtn.Background = ViewFactory.CirclePillBackground(Theme.Muted);
+        closeBtn.Background = ViewFactory.CirclePillBackground(AppTheme.Muted);
         closeBtn.Click += (_, _) =>
         {
             Hide();

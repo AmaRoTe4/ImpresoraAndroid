@@ -56,10 +56,10 @@ public sealed class MainActivity : Activity
     private void BuildUi()
     {
         var root = new FrameLayout(this);
-        root.SetBackgroundColor(new Color(Theme.Background));
+        root.SetBackgroundColor(new Color(AppTheme.Background));
 
         var mainContent = new LinearLayout(this) { Orientation = Orientation.Vertical };
-        mainContent.SetPadding(0, 0, 0, Theme.DpToPxInt(this, 72));
+        mainContent.SetPadding(0, 0, 0, AppTheme.DpToPxInt(this, 72));
 
         mainContent.AddView(BuildHeader());
         mainContent.AddView(BuildCenterArea(), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 0, 1f));
@@ -91,23 +91,23 @@ public sealed class MainActivity : Activity
     {
         var header = new LinearLayout(this) { Orientation = Orientation.Horizontal };
         header.SetGravity(GravityFlags.CenterVertical);
-        var padH = Theme.DpToPxInt(this, 20);
-        header.SetPadding(padH, Theme.DpToPxInt(this, 48), padH, Theme.DpToPxInt(this, 16));
+        var padH = AppTheme.DpToPxInt(this, 20);
+        header.SetPadding(padH, AppTheme.DpToPxInt(this, 48), padH, AppTheme.DpToPxInt(this, 16));
 
         var logo = new ImageView(this);
         logo.SetImageResource(Resource.Drawable.bts_logo);
         logo.SetAdjustViewBounds(true);
         logo.SetScaleType(ImageView.ScaleType.FitCenter);
-        var logoSize = Theme.DpToPxInt(this, 32);
-        var logoParams = new LinearLayout.LayoutParams(logoSize, logoSize) { MarginEnd = Theme.DpToPxInt(this, 12) };
+        var logoSize = AppTheme.DpToPxInt(this, 32);
+        var logoParams = new LinearLayout.LayoutParams(logoSize, logoSize) { MarginEnd = AppTheme.DpToPxInt(this, 12) };
         header.AddView(logo, logoParams);
 
         var titleCol = new LinearLayout(this) { Orientation = Orientation.Vertical };
         var eyebrow = new TextView(this) { Text = "PRINTSERVER", TextSize = 11 };
-        eyebrow.SetTextColor(new Color(Theme.MutedForeground));
+        eyebrow.SetTextColor(new Color(AppTheme.MutedForeground));
         eyebrow.SetTypeface(eyebrow.Typeface, TypefaceStyle.Bold);
         var title = new TextView(this) { Text = "Panel de control", TextSize = 18 };
-        title.SetTextColor(new Color(Theme.Foreground));
+        title.SetTextColor(new Color(AppTheme.Foreground));
         title.SetTypeface(title.Typeface, TypefaceStyle.Bold);
         titleCol.AddView(eyebrow);
         titleCol.AddView(title);
@@ -123,9 +123,9 @@ public sealed class MainActivity : Activity
     {
         var centerArea = new LinearLayout(this) { Orientation = Orientation.Vertical };
         centerArea.SetGravity(GravityFlags.CenterHorizontal);
-        centerArea.SetPadding(Theme.DpToPxInt(this, 24), 0, Theme.DpToPxInt(this, 24), 0);
+        centerArea.SetPadding(AppTheme.DpToPxInt(this, 24), 0, AppTheme.DpToPxInt(this, 24), 0);
 
-        var circleSize = Theme.DpToPxInt(this, 220);
+        var circleSize = AppTheme.DpToPxInt(this, 220);
         _circleButton = new FrameLayout(this) { Clickable = true, Focusable = true };
         _circleButton.Background = ViewFactory.BuildCircleBackground(this, false);
 
@@ -134,7 +134,7 @@ public sealed class MainActivity : Activity
         var circleIcon = new TextView(this) { Text = "🖨", TextSize = 32, Gravity = GravityFlags.Center };
         _circleLabel = new TextView(this) { Text = "SERVIDOR OFF", TextSize = 14, Gravity = GravityFlags.Center };
         _circleLabel.SetTypeface(_circleLabel.Typeface, TypefaceStyle.Bold);
-        _circleLabel.SetTextColor(new Color(Theme.Foreground));
+        _circleLabel.SetTextColor(new Color(AppTheme.Foreground));
         circleInner.AddView(circleIcon);
         circleInner.AddView(_circleLabel);
         var innerParams = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.WrapContent) { Gravity = GravityFlags.Center };
@@ -159,20 +159,20 @@ public sealed class MainActivity : Activity
         centerArea.AddView(_circleButton, new LinearLayout.LayoutParams(circleSize, circleSize));
 
         _hintText = new TextView(this) { Text = "Toca para iniciar el servidor", TextSize = 13 };
-        _hintText.SetTextColor(new Color(Theme.MutedForeground));
-        _hintText.SetPadding(0, Theme.DpToPxInt(this, 16), 0, 0);
+        _hintText.SetTextColor(new Color(AppTheme.MutedForeground));
+        _hintText.SetPadding(0, AppTheme.DpToPxInt(this, 16), 0, 0);
         centerArea.AddView(_hintText);
 
         _statsCard = new LinearLayout(this) { Orientation = Orientation.Horizontal, Visibility = ViewStates.Gone };
-        var statsPad = Theme.DpToPxInt(this, 16);
+        var statsPad = AppTheme.DpToPxInt(this, 16);
         _statsCard.SetPadding(statsPad, statsPad, statsPad, statsPad);
-        _statsCard.Background = ViewFactory.RoundedBackground(Theme.Card, Theme.DpToPx(this, 20));
+        _statsCard.Background = ViewFactory.RoundedBackground(AppTheme.Card, AppTheme.DpToPx(this, 20));
 
-        var (portCol, portValue) = ViewFactory.CreateStatColumn(this, "Puerto", "5000", Theme.Foreground);
+        var (portCol, portValue) = ViewFactory.CreateStatColumn(this, "Puerto", "5000", AppTheme.Foreground);
         _statPortValue = portValue;
-        var (jobsCol, jobsValue) = ViewFactory.CreateStatColumn(this, "Trabajos", "0", Theme.Foreground);
+        var (jobsCol, jobsValue) = ViewFactory.CreateStatColumn(this, "Trabajos", "0", AppTheme.Foreground);
         _statJobsValue = jobsValue;
-        var (errorsCol, errorsValue) = ViewFactory.CreateStatColumn(this, "Errores", "0", Theme.Destructive);
+        var (errorsCol, errorsValue) = ViewFactory.CreateStatColumn(this, "Errores", "0", AppTheme.Destructive);
         _statErrorsValue = errorsValue;
 
         var colLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WrapContent, 1f);
@@ -184,7 +184,7 @@ public sealed class MainActivity : Activity
 
         var statsParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent)
         {
-            TopMargin = Theme.DpToPxInt(this, 24)
+            TopMargin = AppTheme.DpToPxInt(this, 24)
         };
         centerArea.AddView(_statsCard, statsParams);
 
@@ -194,7 +194,7 @@ public sealed class MainActivity : Activity
     private View BuildSeparator()
     {
         var sep = new View(this);
-        sep.SetBackgroundColor(new Color(Theme.Border));
+        sep.SetBackgroundColor(new Color(AppTheme.Border));
         return sep;
     }
 
@@ -205,7 +205,7 @@ public sealed class MainActivity : Activity
             Text = "Iniciando PrintAgent Android...",
             TextSize = 13
         };
-        _log.SetTextColor(new Color(Theme.MutedForeground));
+        _log.SetTextColor(new Color(AppTheme.MutedForeground));
         var scroll = new ScrollView(this);
         scroll.AddView(_log);
         return scroll;
@@ -477,7 +477,7 @@ public sealed class MainActivity : Activity
         {
             if (_circleButton == null) return;
             _circleButton.Background = ViewFactory.BuildCircleBackground(this, running);
-            _circleButton.Elevation = Theme.DpToPx(this, running ? 16 : 4);
+            _circleButton.Elevation = AppTheme.DpToPx(this, running ? 16 : 4);
             _circleLabel!.Text = running ? "SERVIDOR ON" : "SERVIDOR OFF";
             _hintText!.Text = running ? "Toca para detener el servidor" : "Toca para iniciar el servidor";
             ViewFactory.ApplyStatusPill(_statusPill!, running);
