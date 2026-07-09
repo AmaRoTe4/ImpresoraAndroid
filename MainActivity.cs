@@ -1,6 +1,8 @@
 using Android.App;
 using Android.Content;
+using Android.Graphics;
 using Android.OS;
+using Android.Views;
 using Android.Widget;
 using PrintAgentAndroid.Printing;
 using PrintAgentAndroid.Services;
@@ -11,43 +13,80 @@ namespace PrintAgentAndroid;
 public sealed class MainActivity : Activity
 {
     private const string ZplTestPayload = "^XA^FO50,50^ADN,36,20^FDPRINTAGENT TEST^FS^FO50,100^BY2^BCN,80,Y,N,N^FD123456^FS^XZ";
+    private const int StatusPollMs = 4000;
 
-    private TextView? _status;
+    private TextView? _statusBadge;
+    private TextView? _log;
+    private Button? _btnToggleService;
     private readonly ServiceConnection _connection = new();
+    private readonly Handler _pollHandler = new(Looper.MainLooper!);
+    private bool _polling;
 
     protected override void OnCreate(Bundle? savedInstanceState)
     {
         base.OnCreate(savedInstanceState);
 
-        _status = new TextView(this)
-        {
-            Text = "Iniciando PrintAgent Android...",
-            TextSize = 16
-        };
+        var root = new LinearLayout(this) { Orientation = Orientation.Vertical };
+        root.SetPadding(24, 24, 24, 24);
 
+        var logo = new ImageView(this);
+        logo.SetImageResource(Resource.Drawable.bts_logo);
+        logo.SetAdjustViewBounds(true);
+        logo.SetScaleType(ImageView.ScaleType.FitCenter);
+        logo.LayoutParameters = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 220);
+        root.AddView(logo);
+
+        _statusBadge = new TextView(this)
+        {
+            Text = "Estado: iniciando...",
+            TextSize = 15
+        };
+        _statusBadge.SetPadding(0, 16, 0, 16);
+        root.AddView(_statusBadge);
+
+        _btnToggleService = new Button(this) { Text = "Detener servicio" };
         var btnStatus = new Button(this) { Text = "Ver estado" };
         var btnPermission = new Button(this) { Text = "Pedir permiso USB" };
         var btnTestEscPos = new Button(this) { Text = "Imprimir prueba (ESC/POS ticket)" };
         var btnTestZpl = new Button(this) { Text = "Imprimir prueba (ZPL etiqueta)" };
 
-        var layout = new LinearLayout(this)
+        root.AddView(_btnToggleService);
+        root.AddView(btnStatus);
+        root.AddView(btnPermission);
+        root.AddView(btnTestEscPos);
+        root.AddView(btnTestZpl);
+
+        var logHeader = new TextView(this) { Text = "Registro de actividad", TextSize = 14 };
+        logHeader.SetPadding(0, 24, 0, 8);
+        logHeader.SetTypeface(logHeader.Typeface, TypefaceStyle.Bold);
+        root.AddView(logHeader);
+
+        _log = new TextView(this)
         {
-            Orientation = Orientation.Vertical
+            Text = "Iniciando PrintAgent Android...",
+            TextSize = 13
         };
-        layout.SetPadding(24, 24, 24, 24);
-        layout.AddView(_status);
-        layout.AddView(btnStatus);
-        layout.AddView(btnPermission);
-        layout.AddView(btnTestEscPos);
-        layout.AddView(btnTestZpl);
-        SetContentView(layout);
+        var scroll = new ScrollView(this)
+        {
+            LayoutParameters = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 0, 1f)
+        };
+        scroll.AddView(_log);
+        root.AddView(scroll);
+
+        SetContentView(root);
 
         if (Build.VERSION.SdkInt >= BuildVersionCodes.Tiramisu)
             RequestPermissions(new[] { global::Android.Manifest.Permission.PostNotifications }, 100);
 
         _connection.LogReceived += Log;
+        _connection.Connected += () =>
+        {
+            if (_btnToggleService != null) _btnToggleService.Text = "Detener servicio";
+            RefreshStatus();
+        };
         StartAndBindService();
 
+        _btnToggleService.Click += (_, _) => ToggleService();
         btnStatus.Click += (_, _) => RefreshStatus();
         btnPermission.Click += async (_, _) =>
         {
@@ -108,33 +147,86 @@ public sealed class MainActivity : Activity
         BindService(intent, _connection, Bind.AutoCreate);
     }
 
+    private void ToggleService()
+    {
+        if (_connection.Service != null)
+        {
+            try { UnbindService(_connection); } catch { }
+            StopService(new Intent(this, typeof(PrintAgentService)));
+            if (_btnToggleService != null) _btnToggleService.Text = "Iniciar servicio";
+            Log("Servicio detenido manualmente.");
+            UpdateBadge(running: false);
+        }
+        else
+        {
+            StartAndBindService();
+            Log("Iniciando servicio...");
+        }
+    }
+
+    protected override void OnResume()
+    {
+        base.OnResume();
+        _polling = true;
+        _pollHandler.PostDelayed(PollStatus, StatusPollMs);
+    }
+
+    protected override void OnPause()
+    {
+        _polling = false;
+        _pollHandler.RemoveCallbacksAndMessages(null);
+        base.OnPause();
+    }
+
+    private void PollStatus()
+    {
+        if (!_polling) return;
+        RefreshStatus();
+        _pollHandler.PostDelayed(PollStatus, StatusPollMs);
+    }
+
     protected override void OnDestroy()
     {
+        _pollHandler.RemoveCallbacksAndMessages(null);
         try { UnbindService(_connection); } catch { }
         base.OnDestroy();
     }
 
     private void RefreshStatus()
     {
-        var printer = _connection.Service?.Printer;
-        if (printer == null)
+        var service = _connection.Service;
+        var printer = service?.Printer;
+        var serverUp = service?.Server != null;
+
+        if (printer == null || !serverUp)
         {
-            Log("Servicio aún no conectado.");
+            UpdateBadge(running: false);
             return;
         }
 
         var device = printer.FindPrinterDevice();
-        Log(device == null
-            ? "Servidor activo en puerto 5000 - Impresora USB no detectada."
-            : $"Servidor activo en puerto 5000 - USB detectado: {device.DeviceName} VID:{device.VendorId} PID:{device.ProductId} Permiso:{printer.HasPermission(device)}");
+        UpdateBadge(running: true, device, printer);
+    }
+
+    private void UpdateBadge(bool running, global::Android.Hardware.Usb.UsbDevice? device = null, UsbEscPosPrinter? printer = null)
+    {
+        if (_statusBadge == null) return;
+
+        var text = !running
+            ? "Estado: SERVICIO DETENIDO"
+            : device == null
+                ? "Estado: servidor activo (puerto 5000) — impresora USB no detectada"
+                : $"Estado: servidor activo (puerto 5000) — USB VID:{device.VendorId} PID:{device.ProductId} — permiso:{(printer!.HasPermission(device) ? "sí" : "no")}";
+
+        RunOnUiThread(() => _statusBadge.Text = text);
     }
 
     private void Log(string message)
     {
         RunOnUiThread(() =>
         {
-            if (_status != null)
-                _status.Text = $"{DateTime.Now:HH:mm:ss} - {message}\n\n" + _status.Text;
+            if (_log != null)
+                _log.Text = $"{DateTime.Now:HH:mm:ss} - {message}\n\n" + _log.Text;
         });
     }
 
@@ -142,12 +234,14 @@ public sealed class MainActivity : Activity
     {
         public PrintAgentService? Service { get; private set; }
         public event Action<string>? LogReceived;
+        public event Action? Connected;
 
         public void OnServiceConnected(ComponentName? name, IBinder? service)
         {
             Service = ((PrintAgentService.LocalBinder)service!).Service;
             Service.LogEmitted += msg => LogReceived?.Invoke(msg);
             LogReceived?.Invoke("Servicio conectado.");
+            Connected?.Invoke();
         }
 
         public void OnServiceDisconnected(ComponentName? name) => Service = null;

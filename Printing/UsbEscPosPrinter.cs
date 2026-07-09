@@ -42,7 +42,9 @@ public sealed class UsbEscPosPrinter : IDisposable
                 productId = d.ProductId,
                 hasPermission = HasPermission(d),
                 interfaces = d.InterfaceCount,
-                isBulkOutCapable = TryFindBulkOutEndpoint(d, out _, out _)
+                isBulkOutCapable = TryFindBulkOutEndpoint(d, out _, out _),
+                isSelected = PreferredVendorId.HasValue && PreferredProductId.HasValue
+                    && d.VendorId == PreferredVendorId.Value && d.ProductId == PreferredProductId.Value
             })
             .Cast<object>()
             .ToList();
