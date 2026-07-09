@@ -45,15 +45,23 @@ public sealed class PrintAgentService : Service
     {
         if (Server != null) return;
 
-        Printer = new UsbEscPosPrinter(this, msg => LogEmitted?.Invoke(msg));
-        Server = new LocalHttpServer(Printer, msg => LogEmitted?.Invoke(msg), port: 5000);
-        _ = Server.StartAsync();
+        try
+        {
+            Printer = new UsbEscPosPrinter(this, msg => LogEmitted?.Invoke(msg));
+            Server = new LocalHttpServer(Printer, msg => LogEmitted?.Invoke(msg), port: 5000);
+            _ = Server.StartAsync();
 
-        var notification = BuildNotification();
-        if (Build.VERSION.SdkInt >= BuildVersionCodes.Q)
-            StartForeground(NotificationId, notification, ForegroundService.TypeDataSync);
-        else
-            StartForeground(NotificationId, notification);
+            var notification = BuildNotification();
+            if (Build.VERSION.SdkInt >= BuildVersionCodes.Q)
+                StartForeground(NotificationId, notification, ForegroundService.TypeDataSync);
+            else
+                StartForeground(NotificationId, notification);
+        }
+        catch (Exception ex)
+        {
+            LogEmitted?.Invoke("Error arrancando el servicio: " + ex.Message);
+            throw;
+        }
     }
 
     private Notification BuildNotification()
@@ -104,7 +112,7 @@ public sealed class PrintAgentService : Service
             this, 1, restartIntent, PendingIntentFlags.OneShot | PendingIntentFlags.Immutable);
 
         var alarmManager = (AlarmManager?)GetSystemService(AlarmService);
-        alarmManager?.Set(AlarmType.ElapsedRealtime, SystemClock.ElapsedRealtime() + 1000, restartPendingIntent);
+        alarmManager?.SetAndAllowWhileIdle(AlarmType.ElapsedRealtime, SystemClock.ElapsedRealtime() + 1000, restartPendingIntent);
 
         base.OnTaskRemoved(rootIntent);
     }

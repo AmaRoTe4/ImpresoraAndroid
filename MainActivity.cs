@@ -1,7 +1,9 @@
 using Android.App;
 using Android.Content;
 using Android.Graphics;
+using Android.Net;
 using Android.OS;
+using Android.Provider;
 using Android.Views;
 using Android.Widget;
 using PrintAgentAndroid.Printing;
@@ -47,12 +49,14 @@ public sealed class MainActivity : Activity
         _btnToggleService = new Button(this) { Text = "Detener servicio" };
         var btnStatus = new Button(this) { Text = "Ver estado" };
         var btnPermission = new Button(this) { Text = "Pedir permiso USB" };
+        var btnBattery = new Button(this) { Text = "Permitir ejecución en segundo plano" };
         var btnTestEscPos = new Button(this) { Text = "Imprimir prueba (ESC/POS ticket)" };
         var btnTestZpl = new Button(this) { Text = "Imprimir prueba (ZPL etiqueta)" };
 
         root.AddView(_btnToggleService);
         root.AddView(btnStatus);
         root.AddView(btnPermission);
+        root.AddView(btnBattery);
         root.AddView(btnTestEscPos);
         root.AddView(btnTestZpl);
 
@@ -88,6 +92,7 @@ public sealed class MainActivity : Activity
 
         _btnToggleService.Click += (_, _) => ToggleService();
         btnStatus.Click += (_, _) => RefreshStatus();
+        btnBattery.Click += (_, _) => RequestIgnoreBatteryOptimizations();
         btnPermission.Click += async (_, _) =>
         {
             var printer = _connection.Service?.Printer;
@@ -145,6 +150,38 @@ public sealed class MainActivity : Activity
             StartService(intent);
 
         BindService(intent, _connection, Bind.AutoCreate);
+    }
+
+    private bool IsIgnoringBatteryOptimizations()
+    {
+        if (Build.VERSION.SdkInt < BuildVersionCodes.M) return true;
+        var pm = (PowerManager?)GetSystemService(PowerService);
+        return pm?.IsIgnoringBatteryOptimizations(PackageName) ?? false;
+    }
+
+    private void RequestIgnoreBatteryOptimizations()
+    {
+        if (Build.VERSION.SdkInt < BuildVersionCodes.M)
+        {
+            Log("Este Android no tiene optimización de batería que pedir excepción.");
+            return;
+        }
+
+        if (IsIgnoringBatteryOptimizations())
+        {
+            Log("Ya está exenta de la optimización de batería.");
+            return;
+        }
+
+        try
+        {
+            var intent = new Intent(Settings.ActionRequestIgnoreBatteryOptimizations, Uri.Parse("package:" + PackageName));
+            StartActivity(intent);
+        }
+        catch (Exception ex)
+        {
+            Log("No se pudo abrir el diálogo de optimización de batería: " + ex.Message);
+        }
     }
 
     private void ToggleService()
@@ -212,11 +249,13 @@ public sealed class MainActivity : Activity
     {
         if (_statusBadge == null) return;
 
+        var batteryText = IsIgnoringBatteryOptimizations() ? "batería: exenta" : "batería: SIN exención (puede matar el servicio)";
+
         var text = !running
-            ? "Estado: SERVICIO DETENIDO"
+            ? $"Estado: SERVICIO DETENIDO — {batteryText}"
             : device == null
-                ? "Estado: servidor activo (puerto 5000) — impresora USB no detectada"
-                : $"Estado: servidor activo (puerto 5000) — USB VID:{device.VendorId} PID:{device.ProductId} — permiso:{(printer!.HasPermission(device) ? "sí" : "no")}";
+                ? $"Estado: servidor activo (puerto 5000) — impresora USB no detectada — {batteryText}"
+                : $"Estado: servidor activo (puerto 5000) — USB VID:{device.VendorId} PID:{device.ProductId} — permiso:{(printer!.HasPermission(device) ? "sí" : "no")} — {batteryText}";
 
         RunOnUiThread(() => _statusBadge.Text = text);
     }

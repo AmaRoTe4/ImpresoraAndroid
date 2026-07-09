@@ -5,6 +5,10 @@ using Android.OS;
 
 namespace PrintAgentAndroid.Printing;
 
+public readonly record struct UsbPrinterInfo(
+    string FriendlyName, int VendorId, int ProductId,
+    bool HasPermission, int Interfaces, bool IsBulkOutCapable, bool IsSelected);
+
 public sealed class UsbEscPosPrinter : IDisposable
 {
     private readonly Context _context;
@@ -32,21 +36,33 @@ public sealed class UsbEscPosPrinter : IDisposable
         PreferredProductId = productId;
     }
 
-    public IReadOnlyList<object> ListDevices()
+    public static string FriendlyName(int vendorId, int productId) => $"USB {vendorId}:{productId}";
+
+    public static bool TryParseFriendlyName(string name, out int vendorId, out int productId)
+    {
+        vendorId = 0;
+        productId = 0;
+        if (string.IsNullOrWhiteSpace(name) || !name.StartsWith("USB ", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var parts = name[4..].Split(':');
+        return parts.Length == 2
+            && int.TryParse(parts[0], out vendorId)
+            && int.TryParse(parts[1], out productId);
+    }
+
+    public IReadOnlyList<UsbPrinterInfo> ListDevicesDetailed()
     {
         return (_usbManager.DeviceList?.Values ?? Enumerable.Empty<UsbDevice>())
-            .Select(d => new
-            {
-                name = d.DeviceName,
-                vendorId = d.VendorId,
-                productId = d.ProductId,
-                hasPermission = HasPermission(d),
-                interfaces = d.InterfaceCount,
-                isBulkOutCapable = TryFindBulkOutEndpoint(d, out _, out _),
-                isSelected = PreferredVendorId.HasValue && PreferredProductId.HasValue
-                    && d.VendorId == PreferredVendorId.Value && d.ProductId == PreferredProductId.Value
-            })
-            .Cast<object>()
+            .Select(d => new UsbPrinterInfo(
+                FriendlyName(d.VendorId, d.ProductId),
+                d.VendorId,
+                d.ProductId,
+                HasPermission(d),
+                d.InterfaceCount,
+                TryFindBulkOutEndpoint(d, out _, out _),
+                PreferredVendorId.HasValue && PreferredProductId.HasValue
+                    && d.VendorId == PreferredVendorId.Value && d.ProductId == PreferredProductId.Value))
             .ToList();
     }
 

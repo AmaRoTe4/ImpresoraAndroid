@@ -161,13 +161,18 @@ public sealed class LocalHttpServer
 
             if (request.Method == "GET" && request.Path == "/printers")
             {
+                var devices = _printer.ListDevicesDetailed();
+                var names = devices.Select(d => d.FriendlyName).ToList();
+                var preferredName = _printer.PreferredVendorId.HasValue && _printer.PreferredProductId.HasValue
+                    ? UsbEscPosPrinter.FriendlyName(_printer.PreferredVendorId.Value, _printer.PreferredProductId.Value)
+                    : names.FirstOrDefault() ?? "USB";
+
                 await WriteJson(stream, 200, new
                 {
-                    defaultPrinter = "USB",
-                    preferredPrinter = "USB",
-                    selectedVendorId = _printer.PreferredVendorId,
-                    selectedProductId = _printer.PreferredProductId,
-                    printers = _printer.ListDevices()
+                    defaultPrinter = names.FirstOrDefault() ?? "USB",
+                    preferredPrinter = preferredName,
+                    printers = names,
+                    printersDetailed = devices
                 });
                 return;
             }
@@ -194,6 +199,11 @@ public sealed class LocalHttpServer
                 {
                     _printer.SetPreferredPrinter(vid, pid);
                 }
+                else if (cfg.TryGetProperty("printer", out var printerEl)
+                    && UsbEscPosPrinter.TryParseFriendlyName(printerEl.GetString() ?? "", out var pvid, out var ppid))
+                {
+                    _printer.SetPreferredPrinter(pvid, ppid);
+                }
 
                 await WriteJson(stream, 200, new
                 {
@@ -201,8 +211,9 @@ public sealed class LocalHttpServer
                     port = _port,
                     host = _bindAddress.ToString(),
                     listenAll = Equals(_bindAddress, IPAddress.Any),
-                    selectedVendorId = _printer.PreferredVendorId,
-                    selectedProductId = _printer.PreferredProductId
+                    preferredPrinter = _printer.PreferredVendorId.HasValue && _printer.PreferredProductId.HasValue
+                        ? UsbEscPosPrinter.FriendlyName(_printer.PreferredVendorId.Value, _printer.PreferredProductId.Value)
+                        : null
                 });
                 return;
             }

@@ -29,12 +29,21 @@ Returns current server status and detected printer info.
 
 ## GET /printers
 Returns information about default printer, preferred printer, and list of installed USB devices.
+Same shape as the Windows agent — `printers` is an array of printer name **strings**.
 
-**Android-specific:** each entry in `printers` includes `vendorId`/`productId`
-(USB doesn't expose a friendly driver name like Windows does). Response also
-includes `selectedVendorId`/`selectedProductId`, reflecting the currently
-preferred printer set via `/config` (`null` if none set — falls back to the
-first USB device with a BULK OUT endpoint).
+```json
+{
+  "defaultPrinter": "USB 11575:33575",
+  "preferredPrinter": "USB 11575:33575",
+  "printers": ["USB 11575:33575"]
+}
+```
+
+**Android-specific:** USB devices don't have a friendly driver name like Windows
+does, so a deterministic name `"USB {vendorId}:{productId}"` is synthesized. The
+response also includes a Android-only `printersDetailed` field (array of objects
+with `vendorId`, `productId`, `hasPermission`, `isBulkOutCapable`, `isSelected`)
+for clients that want the richer data.
 
 ## POST /config
 Updates server configuration and restarts the HTTP server.
@@ -47,10 +56,13 @@ Updates server configuration and restarts the HTTP server.
   already `0.0.0.0`** so LAN clients can reach it without calling `/config` first.
 - `vendor_id` / `product_id` — **(Android only)** sets the preferred USB printer when
   more than one is connected. Must be sent together.
+- `printer` — **(Android only)** same effect as `vendor_id`/`product_id`, but takes
+  the friendly name string as returned by `/printers` (e.g. `"USB 11575:33575"`).
+  Mirrors how the Windows agent's `/config` accepts a printer name.
 
 **Response:**
 ```json
-{ "status": "ok", "port": 5000, "host": "127.0.0.1", "listenAll": false }
+{ "status": "ok", "port": 5000, "host": "127.0.0.1", "listenAll": false, "preferredPrinter": "USB 11575:33575" }
 ```
 
 ## POST /test

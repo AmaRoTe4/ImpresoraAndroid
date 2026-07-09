@@ -96,11 +96,15 @@ curl -i http://127.0.0.1:5000/
 # debe devolver 200: {"status":"ok","service":"PrintAgent Android"}
 
 curl -i http://127.0.0.1:5000/printers
-# debe devolver 200 con la lista de impresoras USB conectadas (name/vendorId/productId)
+# debe devolver 200: {"defaultPrinter":"USB 11575:33575","preferredPrinter":"USB 11575:33575","printers":["USB 11575:33575"],"printersDetailed":[...]}
 ```
 
 Si `/` no responde 200, el problema es del server HTTP (bind/puerto/servicio), no de la
-impresora — no tiene sentido seguir probando impresión hasta que esto ande.
+impresora — no tiene sentido seguir probando impresión hasta que esto ande. Si pasa justo
+después de sacar la app de "Recientes" con un swipe, esperar unos segundos y reintentar —
+el `AlarmManager` tarda ~1s en reiniciar el servicio, y si el celular tiene optimización de
+batería agresiva puede tardar más (ver sección de limitaciones abajo, botón "Permitir
+ejecución en segundo plano" en la app).
 
 ## 6. Ver logs / diagnosticar un crash
 
@@ -138,4 +142,12 @@ log es ruido del sistema.
   exacto de arrancar el servicio — con USB eso choca con el flujo real (el permiso USB se
   pide recién cuando el usuario toca el botón, después de que el servicio ya arrancó).
 - El permiso USB se pide por dispositivo — si se desconecta el cable, hay que volver a tocar "Pedir permiso USB".
+- **Persistencia en background:** sacar la app de "Recientes" con swipe mata el proceso
+  (con foreground service y todo) por defecto en Android — el atributo `[Service]` de
+  .NET Android no expone `stopWithTask="false"` para evitarlo. Mitigado con
+  `OnTaskRemoved` + `AlarmManager.SetAndAllowWhileIdle` (reinicia el servicio ~1s
+  después, resistente a Doze). En Samsung One UI y otros OEM con optimización de batería
+  agresiva, esto puede no alcanzar — tocar **"Permitir ejecución en segundo plano"** en
+  la app para pedir la exención real (abre el diálogo del sistema). Sin esa exención, no
+  hay garantía 100% de persistencia — es una limitación de la plataforma, no del código.
 - Sin cola de reintentos, sin ajuste de ancho de papel configurable.
